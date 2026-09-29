@@ -1,0 +1,17 @@
+node_modules/
+dist/
+build/
+.env
+!.env.example
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+server/prisma/dev.db
+server/prisma/*.db
+server/prisma/*.db-journal
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+*.log
+coverage/

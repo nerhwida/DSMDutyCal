@@ -1,0 +1,227 @@
+// DutyCal Prisma schema
+// 참고: SQLite 커넥터는 네이티브 enum을 지원하지 않으므로,
+// enum 성격의 필드는 String으로 선언하고 zod로 값 검증한다 (server/src/lib/enums.ts 참고).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// 교사
+model Teacher {
+  id               Int       @id @default(autoincrement())
+  name             String
+  active           Boolean   @default(true)
+  pinHash          String
+  mustChangePin    Boolean   @default(false)
+  isAdmin          Boolean   @default(false)
+  sortOrder        Int       @default(0)
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  gradeHead           GradeHead?
+  teacherGrades       TeacherGrade[]
+  weekdayExclusions   TeacherWeekdayExclusion[]
+  unavailableDates    TeacherUnavailableDate[]
+  initialCounts       InitialCount[]
+  notifications       Notification[]
+  auditLogs           AuditLog[]
+
+  currentAssignments  Assignment[] @relation("CurrentTeacher")
+  originalAssignments Assignment[] @relation("OriginalTeacher")
+
+  historyChangedBy    AssignmentHistory[] @relation("ChangedBy")
+  historyFrom         AssignmentHistory[] @relation("FromTeacher")
+  historyTo           AssignmentHistory[] @relation("ToTeacher")
+
+  confirmedMonthPlans MonthPlan[] @relation("ConfirmedBy")
+  closedMonthPlans    MonthPlan[] @relation("ClosedBy")
+
+  apiClientsCreated   ApiClient[] @relation("ApiClientCreatedBy")
+}
+
+/// 학년부장 (학년당 1명, ADMIN만 지정)
+model GradeHead {
+  id         Int      @id @default(autoincrement())
+  grade      Int      @unique
+  teacherId  Int      @unique
+  assignedAt DateTime @default(now())
+
+  teacher Teacher @relation(fields: [teacherId], references: [id])
+}
+
+/// 학년별 감독 가능 여부 + 학년×요일그룹별 순환 순서 (F2: 월~목/금요일 각각 드래그 순서 관리)
+model TeacherGrade {
+  id           Int     @id @default(autoincrement())
+  teacherId    Int
+  grade        Int
+  canWeekday   Boolean @default(true)
+  canFriday    Boolean @default(true)
+  weekdayOrder Int     @default(0)
+  fridayOrder  Int     @default(0)
+
+  teacher Teacher @relation(fields: [teacherId], references: [id])
+
+  @@unique([teacherId, grade])
+}
+
+/// 요일 제외 (방과후 수업 등). reason: 'AFTER_SCHOOL' | 'OTHER'
+model TeacherWeekdayExclusion {
+  id        Int    @id @default(autoincrement())
+  teacherId Int
+  weekday   Int // 1=월 ... 5=금
+  reason    String
+
+  teacher Teacher @relation(fields: [teacherId], references: [id])
+
+  @@unique([teacherId, weekday])
+}
+
+/// 감독 불가일
+model TeacherUnavailableDate {
+  id        Int    @id @default(autoincrement())
+  teacherId Int
+  date      String // 'YYYY-MM-DD'
+  reason    String
+
+  teacher Teacher @relation(fields: [teacherId], references: [id])
+
+  @@unique([teacherId, date])
+}
+
+/// 특별 일정 (날짜 × 학년 단위). type: 'MANDATORY_HOME' | 'HOLIDAY' | 'EXAM' | 'EVENT' | 'OTHER'
+/// 등록된 (날짜, 학년)은 감독 미편성. 전 학년 일정은 1·2·3학년 3행으로 저장한다.
+/// 예: 2학년 수학여행 → (날짜, 2)만 등록하면 1·3학년은 그날도 정상 편성.
+model SpecialDay {
+  id    Int    @id @default(autoincrement())
+  date  String // 'YYYY-MM-DD'
+  grade Int
+  type  String
+  title String
+
+  @@unique([date, grade])
+}
+
+/// 월별(월 x 학년) 편성 상태. status: 'EMPTY' | 'DRAFT' | 'CONFIRMED' | 'CLOSED'
+model MonthPlan {
+  id            Int       @id @default(autoincrement())
+  year          Int
+  month         Int
+  grade         Int
+  status        String    @default("EMPTY")
+  confirmedAt   DateTime?
+  confirmedById Int?
+  closedAt      DateTime?
+  closedById    Int?
+
+  confirmedBy Teacher? @relation("ConfirmedBy", fields: [confirmedById], references: [id])
+  closedBy    Teacher? @relation("ClosedBy", fields: [closedById], references: [id])
+
+  @@unique([year, month, grade])
+}
+
+/// 감독 배정. rotationGroup: 'WEEKDAY' | 'FRIDAY'
+model Assignment {
+  id                Int       @id @default(autoincrement())
+  date              String // 'YYYY-MM-DD'
+  grade             Int
+  teacherId         Int
+  originalTeacherId Int
+  rotationGroup     String
+  isModified        Boolean   @default(false)
+  isLocked          Boolean   @default(false)
+  modifiedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  teacher         Teacher @relation("CurrentTeacher", fields: [teacherId], references: [id])
+  originalTeacher Teacher @relation("OriginalTeacher", fields: [originalTeacherId], references: [id])
+
+  history       AssignmentHistory[]
+  notifications Notification[]
+
+  @@unique([date, grade])
+}
+
+/// 변경 이력. changedByRole: 'ADMIN' | 'GRADE_HEAD' | 'TEACHER'
+model AssignmentHistory {
+  id            Int      @id @default(autoincrement())
+  assignmentId  Int
+  swapGroupId   String?
+  fromTeacherId Int? // null = 미배정 칸을 채운 경우
+  toTeacherId   Int
+  changedAt     DateTime @default(now())
+  changedById   Int
+  changedByRole String
+  note          String?
+
+  assignment  Assignment @relation(fields: [assignmentId], references: [id])
+  fromTeacher Teacher?   @relation("FromTeacher", fields: [fromTeacherId], references: [id])
+  toTeacher   Teacher    @relation("ToTeacher", fields: [toTeacherId], references: [id])
+  changedBy   Teacher    @relation("ChangedBy", fields: [changedById], references: [id])
+}
+
+/// 초기 누계. rotationGroup: 'WEEKDAY' | 'FRIDAY'
+model InitialCount {
+  id            Int    @id @default(autoincrement())
+  teacherId     Int
+  grade         Int
+  rotationGroup String
+  count         Int    @default(0)
+
+  teacher Teacher @relation(fields: [teacherId], references: [id])
+
+  @@unique([teacherId, grade, rotationGroup])
+}
+
+/// 알림. type: 'ASSIGNED_BY_CHANGE' | 'REMOVED_BY_CHANGE' | 'SWAPPED' | 'MONTH_CONFIRMED'
+model Notification {
+  id           Int       @id @default(autoincrement())
+  teacherId    Int
+  type         String
+  assignmentId Int?
+  message      String
+  readAt       DateTime?
+  createdAt    DateTime  @default(now())
+
+  teacher    Teacher     @relation(fields: [teacherId], references: [id])
+  assignment Assignment? @relation(fields: [assignmentId], references: [id])
+}
+
+/// 관리 작업 기록. target에는 JSON.stringify한 문자열을 저장한다 (SQLite는 Json 타입 미지원).
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  actorId   Int
+  action    String
+  target    String
+  createdAt DateTime @default(now())
+
+  actor Teacher @relation(fields: [actorId], references: [id])
+}
+
+/// API 연동 계정 (외부 시스템용, 감독표 배포 API만 호출 가능). ADMIN이 발급·관리한다.
+/// 키 원문은 저장하지 않고 SHA-256 해시만 저장한다 (발급 시 1회만 표시).
+model ApiClient {
+  id          Int       @id @default(autoincrement())
+  name        String
+  keyHash     String    @unique
+  keyPrefix   String // 화면 식별용 앞부분 (예: 'dcf_3A8T')
+  active      Boolean   @default(true)
+  createdById Int
+  createdAt   DateTime  @default(now())
+  lastUsedAt  DateTime?
+
+  createdBy Teacher @relation("ApiClientCreatedBy", fields: [createdById], references: [id])
+}
+
+/// 시스템 설정 (key-value)
+model Setting {
+  key   String @id
+  value String
+}
