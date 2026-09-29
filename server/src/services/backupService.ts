@@ -15,12 +15,28 @@ const tempFile = (prefix: string) => path.join(os.tmpdir(), `dutycal-${prefix}-$
 const sqlString = (s: string) => `'${s.replace(/'/g, "''")}'`;
 
 /**
- * 현재 DB의 일관된 스냅샷을 만든다 (서비스 중에도 안전: SQLite VACUUM INTO).
- * 반환된 파일은 호출자가 전송 후 삭제한다.
+ * 현재 DB의 일관된 스냅샷을 filePath에 만든다 (서비스 중에도 안전: SQLite VACUUM INTO).
+ * 스냅샷에서는 로그인 세션을 지운다. 복원하면 어차피 지우는 데이터라 백업 파일에 남길 이유가 없다.
+ * 지운 뒤 VACUUM으로 파일을 다시 써서, 빈 페이지에 세션 ID가 남지 않게 한다.
+ */
+async function writeSnapshot(filePath: string) {
+  await prisma.$executeRawUnsafe(`VACUUM INTO ${sqlString(filePath)}`);
+  const snapshot = new PrismaClient({ datasourceUrl: `file:${filePath}` });
+  try {
+    await snapshot.$executeRawUnsafe('DELETE FROM Session');
+    await snapshot.$executeRawUnsafe('VACUUM');
+  } finally {
+    await snapshot.$disconnect();
+    for (const suffix of ['-wal', '-shm', '-journal']) rmSync(filePath + suffix, { force: true });
+  }
+}
+
+/**
+ * 내려받기용 백업 파일을 만든다. 반환된 파일은 호출자가 전송 후 삭제한다.
  */
 export async function createBackupFile(actorId: number): Promise<{ filePath: string; fileName: string }> {
   const filePath = tempFile('backup');
-  await prisma.$executeRawUnsafe(`VACUUM INTO ${sqlString(filePath)}`);
+  await writeSnapshot(filePath);
   await recordAudit(actorId, 'BACKUP', { size: statSync(filePath).size });
   return { filePath, fileName: `dutycal-backup-${timestampForFile()}.db` };
 }
@@ -59,7 +75,7 @@ export async function ensureMonthlyBackup(now = new Date(), keep = keepCount()):
   mkdirSync(dir, { recursive: true });
   const tmp = `${file}.tmp`;
   rmSync(tmp, { force: true });
-  await prisma.$executeRawUnsafe(`VACUUM INTO ${sqlString(tmp)}`);
+  await writeSnapshot(tmp);
   renameSync(tmp, file); // 완성된 파일만 목록에 보이도록
   pruneMonthlyBackups(keep);
   return file;
@@ -155,8 +171,8 @@ export async function stageRestore(buffer: Buffer, actorId: number) {
     const counts = await client.$queryRawUnsafe<{ teachers: bigint; assignments: bigint }[]>(
       'SELECT (SELECT COUNT(*) FROM Teacher) AS teachers, (SELECT COUNT(*) FROM Assignment) AS assignments',
     );
-    // 백업에 들어 있는 로그인 세션은 지운다. 오래된 백업을 복원했을 때 이미 로그아웃한 세션이
-    // 되살아나지 않도록, 복원 후에는 모두 다시 로그인하게 한다.
+    // 백업에 들어 있는 로그인 세션은 지운다. 새 백업에는 세션이 없지만, 이 기능 이전에 만든 백업이나
+    // DB 파일을 직접 복사한 경우를 위해 복원 시에도 지운다 (복원 후에는 모두 다시 로그인).
     if (tables.includes('Session')) await client.$executeRawUnsafe('DELETE FROM Session');
     await client.$disconnect();
 

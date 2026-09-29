@@ -6,6 +6,7 @@ import request from 'supertest';
 import { PrismaClient } from '@prisma/client';
 import { createApp } from '../app.js';
 import { findTeacherId } from '../test/helpers.js';
+import { prisma } from '../lib/prisma.js';
 import { applyPendingRestore, backupsDir, monthlyBackupsDir, pendingRestorePath } from '../lib/dbFile.js';
 import {
   ensureMonthlyBackup,
@@ -73,6 +74,31 @@ describe('DB 백업/복원 (F11)', () => {
     const teacher = request.agent(app);
     await teacher.post('/api/auth/login').send({ teacherId: await findTeacherId('평교사'), pin: '4444' });
     expect((await teacher.get('/api/backup')).status).toBe(403);
+  });
+
+  it('백업 파일에는 로그인 세션이 없다 (행은 물론 파일 바이트에도 세션 ID가 남지 않는다)', async () => {
+    const login = await request(app)
+      .post('/api/auth/login')
+      .send({ teacherId: await findTeacherId(process.env.ADMIN_NAME!), pin: ADMIN_PIN });
+    const cookie = (login.headers['set-cookie'] as unknown as string[])[0].split(';')[0];
+    // 서명 쿠키 'dutycal.sid=s:<sid>.<서명>' 에서 sid만 꺼낸다
+    const signed = decodeURIComponent(cookie.slice('dutycal.sid='.length));
+    const sid = signed.slice(2, signed.lastIndexOf('.'));
+    expect(await prisma.session.count({ where: { sid } })).toBe(1); // 운영 DB에는 세션이 있다
+
+    const res = await request(app).get('/api/backup').set('Cookie', cookie).buffer(true).parse(binaryParser);
+    expect(res.status).toBe(200);
+    const backup = res.body as Buffer;
+    expect(backup.includes(Buffer.from(sid))).toBe(false);
+
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'dutycal-test-'));
+    const file = path.join(dir, 'backup.db');
+    writeFileSync(file, backup);
+    const client = new PrismaClient({ datasourceUrl: `file:${file}` });
+    const rows = await client.$queryRawUnsafe<{ n: bigint }[]>('SELECT COUNT(*) AS n FROM Session');
+    await client.$disconnect();
+    expect(Number(rows[0].n)).toBe(0);
+    rmSync(dir, { recursive: true, force: true });
   });
 
   it('복원: PIN 재확인 후 검증된 백업만 대기 상태가 되고, 취소할 수 있다', async () => {
@@ -151,6 +177,10 @@ describe('월초 자동 백업', () => {
     expect(file).toMatch(/monthly-2099-02\.db$/);
     expect(readFileSync(file!).subarray(0, 15).toString('latin1')).toBe('SQLite format 3');
     expect(existsSync(`${file}.tmp`)).toBe(false);
+    const client = new PrismaClient({ datasourceUrl: `file:${file}` });
+    const rows = await client.$queryRawUnsafe<{ n: bigint }[]>('SELECT COUNT(*) AS n FROM Session');
+    await client.$disconnect();
+    expect(Number(rows[0].n)).toBe(0); // 자동 백업에도 세션 없음
 
     expect(await ensureMonthlyBackup(new Date('2099-03-20T09:00:00+09:00'), 1000)).toBeNull();
   });
