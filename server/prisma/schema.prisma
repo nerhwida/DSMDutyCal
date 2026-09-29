@@ -220,6 +220,15 @@ model ApiClient {
   createdBy Teacher @relation("ApiClientCreatedBy", fields: [createdById], references: [id])
 }
 
+/// 로그인 세션 (express-session 저장소). 서버를 재시작·업데이트해도 로그인이 유지되도록 DB에 저장한다.
+model Session {
+  sid       String   @id
+  data      String // JSON (express-session SessionData)
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
 /// 시스템 설정 (key-value)
 model Setting {
   key   String @id
