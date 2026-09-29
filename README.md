@@ -7,8 +7,9 @@
 기본 정보 설정 → 자동 편성(미리보기) → 확정 → 달력에서 교체·변경 → 누계·공정성 확인 → 월 마감 → 인쇄
 ```
 
-> 개발 진행 상황: Phase 1~5 완료. Phase 6(Docker 배포·백업/복원)은 진행 예정입니다.
+> 개발 진행 상황: Phase 1~6 완료 (Docker 배포·백업/복원 포함).
 > 전체 요구사항은 [REQUIREMENTS.md](REQUIREMENTS.md)를 참고하세요.
+> 서버에 설치하려면 [배포 (Docker)](#배포-docker)로 바로 가세요.
 
 ---
 
@@ -104,6 +105,9 @@ Copy-Item .env.example server\.env
 | `SESSION_HOURS` | 로그인 유지 시간 | `8` |
 | `ADMIN_NAME` / `ADMIN_INITIAL_PIN` | 최초 실행 시 자동 생성되는 관리자 계정 | `관리자` / `0000` |
 | `LOGIN_MAX_ATTEMPTS` / `LOGIN_LOCKOUT_MINUTES` | 로그인 실패 잠금 정책 | `5` / `5` |
+| `DUTYCAL_PORT` | (Docker) 서버에서 접속할 포트 | `8080` |
+| `COOKIE_SECURE` | HTTPS로 서비스하면 `true` | `false` |
+| `TRUST_PROXY` | 리버스 프록시(nginx 등) 뒤라면 `1` | (없음) |
 
 `SESSION_SECRET`용 임의 문자열은 다음 명령으로 만들 수 있습니다.
 
@@ -156,6 +160,9 @@ npx vitest run -t "맞교환"
 
 > **Windows 참고:** 개발 서버가 실행 중이면 Prisma 엔진 파일이 잠겨 `prisma generate`가 `EPERM`으로 실패합니다.
 > 스키마를 바꿀 때는 개발 서버를 멈춘 뒤 실행하세요.
+>
+> 서버는 시작할 때 DB를 WAL 모드로 바꾸므로 `dev.db-wal`, `dev.db-shm` 파일이 함께 생깁니다(정상).
+> DB 파일을 직접 복사해 백업하지 말고, 앱의 **설정 → 백업 파일 내려받기**를 쓰세요.
 
 ---
 
@@ -222,7 +229,11 @@ DSMDutyCal/
 │     ├─ services/          # DB 연동 로직 (편성·배정 변경·통계·이력·배포)
 │     ├─ routes/            # REST API + 통합 테스트
 │     ├─ permissions/       # 권한 미들웨어
-│     └─ auth/              # PIN 로그인·세션
+│     ├─ auth/              # PIN 로그인·세션(DB 저장)
+│     └─ scripts/prestart.ts  # 컨테이너 시작 시 대기 중인 복원 적용
+├─ docker/                  # entrypoint.sh, 추가 루트 인증서(certs/)
+├─ Dockerfile               # 빌드 → 실행 2단계 이미지
+├─ docker-compose.yml       # 단일 컨테이너 + dutycal-data 볼륨
 ├─ REQUIREMENTS.md          # 요구사항 명세 (개정 이력 포함)
 └─ CLAUDE.md                # 개발 가이드 (설계 결정·주의사항)
 ```
@@ -236,17 +247,91 @@ DSMDutyCal/
 - [ ] `SESSION_SECRET`을 긴 임의 문자열로 바꿨다.
 - [ ] `ADMIN_INITIAL_PIN`을 `0000`이 아닌 값으로 바꿨고, 최초 로그인 후 관리자 PIN을 다시 변경했다.
 - [ ] `.env`와 DB 파일(`*.db`)이 저장소에 올라가지 않는다(`.gitignore`에 포함됨).
-- [ ] HTTPS로 서비스한다면 `server/src/auth/session.ts`의 쿠키 `secure` 옵션을 `true`로 바꿨다.
+- [ ] HTTPS로 서비스한다면 `.env`에 `COOKIE_SECURE=true`를 설정했다 (리버스 프록시 뒤라면 `TRUST_PROXY=1`도).
 - [ ] 샘플 시드(`npm run prisma:seed`)를 운영 DB에 실행하지 않았다.
-
-> 현재 세션은 서버 메모리에 저장되므로, 서버를 재시작하면 모든 사용자가 다시 로그인해야 합니다.
+- [ ] 정기적으로 **설정 → 백업 파일 내려받기**로 백업을 받아 서버 밖에 보관한다.
 
 ---
 
-## 배포 (Phase 6 예정)
+## 배포 (Docker)
 
-Docker(단일 컨테이너 + SQLite 볼륨), `docker-compose`, 관리자 화면의 DB 백업/복원 기능을 준비 중입니다.
-완료되면 이 절에 설치·운영 방법을 추가합니다.
+단일 컨테이너(서버 + 화면) + SQLite 볼륨으로 동작합니다. 서버에 **Docker**와 **Docker Compose**가 필요합니다.
+(Windows 서버라면 Docker Desktop, Linux라면 Docker Engine + compose 플러그인)
+
+### 1. 설치
+
+```powershell
+git clone https://github.com/nerhwida/DSMDutyCal.git
+cd DSMDutyCal
+Copy-Item .env.example .env        # Linux: cp .env.example .env
+```
+
+`.env`를 열어 **반드시** 다음을 바꿉니다.
+
+| 변수 | 바꿀 값 |
+|---|---|
+| `SESSION_SECRET` | 긴 임의 문자열 (위 "환경 변수 설정"의 명령으로 생성) |
+| `ADMIN_NAME` / `ADMIN_INITIAL_PIN` | 최초 관리자 이름·PIN (`0000` 사용 금지) |
+| `DUTYCAL_PORT` | 접속 포트 (기본 `8080`) |
+| `COOKIE_SECURE` | HTTPS로 서비스하면 `true`, http면 `false` 유지 |
+
+`DATABASE_URL`, `PORT` 등 컨테이너 내부 값은 `docker-compose.yml`이 알아서 설정하므로 바꾸지 않아도 됩니다.
+
+### 2. 실행
+
+```powershell
+docker compose up -d --build
+docker compose ps          # STATUS가 healthy 인지 확인
+docker compose logs -f     # 로그 보기 (Ctrl+C로 빠져나옴)
+```
+
+브라우저에서 `http://<서버 주소>:8080` 으로 접속해 관리자 계정으로 로그인합니다.
+
+컨테이너가 시작될 때마다 다음이 자동으로 실행됩니다.
+1. 대기 중인 복원이 있으면 적용 (아래 "백업과 복원")
+2. DB 구조를 최신으로 업데이트 (`prisma migrate deploy`) — 처음 설치 시 DB가 새로 만들어짐
+3. 서버 시작
+
+### 3. 데이터 보관 위치
+
+DB는 Docker 볼륨 `dutycal-data`(컨테이너 안 `/data`)에 저장됩니다.
+`docker compose down`, `docker compose up -d --build`, 서버 재부팅을 해도 **데이터와 로그인 상태가 유지**됩니다.
+
+> ⚠️ `docker compose down -v`의 `-v`는 **볼륨(=모든 데이터)을 삭제**합니다. 쓰지 마세요.
+
+### 4. 업데이트
+
+```powershell
+git pull
+docker compose up -d --build
+```
+
+DB 구조 변경은 시작할 때 자동으로 적용됩니다. 업데이트 전에 백업을 받아 두는 것을 권장합니다.
+
+### 5. 백업과 복원
+
+관리자 로그인 → **설정** 탭에서 합니다.
+
+- **백업**: `백업 파일 내려받기` → `dutycal-backup-날짜-시각.db` 파일이 받아집니다.
+  서비스 중에도 안전하게 만들어집니다. 월 마감 후 등 정기적으로 받아 서버 밖(학교 공유 드라이브 등)에 보관하세요.
+- **복원**: 백업 파일 선택 → 관리자 PIN 재입력 → `복원 준비`
+  - 파일을 검증한 뒤 서버가 **자동으로 재시작**되며 복원이 적용됩니다 (약 10~20초). 이후 모두 다시 로그인합니다.
+  - 복원 직전 데이터는 볼륨의 `/data/backups/before-restore-날짜-시각.db`에 자동 보관됩니다.
+  - 이전 버전에서 만든 백업도 복원 후 최신 구조로 자동 변환됩니다. 더 최신 버전에서 만든 백업은 거부됩니다.
+
+명령줄로 백업 파일을 직접 꺼내려면 (서버 관리자용):
+
+```powershell
+docker compose cp dutycal:/data/backups ./backups-from-container
+```
+
+### 6. 문제 해결
+
+- **빌드 중 `self-signed certificate in certificate chain`**: 학교·기관망이 TLS를 가로채는 환경입니다.
+  네트워크 관리자에게 받은 루트 인증서(`.crt`)를 `docker/certs/`에 넣고 `docker compose build --no-cache` 하세요.
+- **로그인이 바로 풀림**: http로 접속하는데 `COOKIE_SECURE=true`이면 쿠키가 저장되지 않습니다. `false`로 바꾸고
+  `docker compose up -d` 하세요.
+- **포트 충돌**: `.env`의 `DUTYCAL_PORT`를 다른 번호로 바꾸세요.
 
 ---
 

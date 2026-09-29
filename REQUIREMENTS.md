@@ -22,6 +22,9 @@
 | 추가 | **감독표 배포 API + API 연동 계정** (외부 시스템용 조회 전용). 가정 8의 명시적 예외. | 가정 8, §4 ApiClient, F12, §7 |
 | 추가 | 통계 **기간 선택**: 학기 프리셋(1학기 3~8월, 2학기 9~2월, 학년도) + 직접 선택. | F7 |
 | 구체화 | 순환 포인터의 월 간 연속, 6.3-3 옵션의 적용 위치·기본값, 강제 배정의 한계 등 명세에 없던 세부 규칙. | F6, 6.3 |
+| 구체화 | **백업/복원 방식**: 백업은 실행 중 스냅샷 다운로드, 복원은 업로드 → 검증 → 재시작 시 적용(직전 DB 자동 보관, 오래된 백업은 자동 마이그레이션). | F11, §7 |
+| 추가 | **로그인 세션을 DB에 저장** (재시작·업데이트 후에도 로그인 유지). | §4 Session, §8 |
+| 보류 | `/api/settings`(시스템 설정)는 정의된 설정 항목이 없어 구현하지 않음. 설정 화면은 백업/복원만 제공. | §7 |
 
 ---
 
@@ -195,7 +198,11 @@ SQLite는 Prisma 네이티브 `enum`을 지원하지 않으므로 enum 성격의
 - `actorId`, `action ('GENERATE'|'REGENERATE'|'CONFIRM'|'CLOSE'|'REOPEN'|'SET_GRADE_HEAD'|'RESET_PIN'|'CREATE_API_CLIENT' 등)`, `target (JSON)`, `createdAt`
 
 ### Setting
-- `key`, `value` (예: `sessionHours`)
+- `key`, `value` (예: `sessionHours`) — 현재 사용하는 설정 항목 없음 (예약)
+
+### Session (로그인 세션) *(추가)*
+- `sid (PK)`, `data (JSON)`, `expiresAt`
+- express-session 저장소. 서버 재시작·업데이트 후에도 로그인이 유지된다. 백업을 복원하면 백업 안의 세션은 지워져 모두 다시 로그인한다.
 
 ---
 
@@ -388,8 +395,17 @@ SQLite는 Prisma 네이티브 `enum`을 지원하지 않으므로 enum 성격의
 - 월별 변경 이력 목록: 일시, 날짜, 학년, 이전 → 이후 교사(미배정 칸 지정은 "미배정 → 교사"), 변경자(역할), 메모, 맞교환 표시.
 - 학년 필터. 조회 범위는 F1-1 권한 매트릭스를 따른다.
 
-### F11. 데이터 백업
-- 설정 화면에서 SQLite DB 파일 다운로드(백업) 및 복원(업로드) 기능.
+### F11. 데이터 백업 *(구체화)*
+- 설정 화면(ADMIN)에서 SQLite DB 파일 다운로드(백업) 및 복원(업로드) 기능.
+- **백업**: 서비스 중에도 일관된 스냅샷을 만든다 (SQLite `VACUUM INTO`). 파일명 `dutycal-backup-YYYYMMDD-HHmmss.db`. AuditLog 기록.
+- **복원**:
+  1. 백업 파일 업로드 + **관리자 PIN 재입력**
+  2. 서버가 검증한다: SQLite 형식, DutyCal 테이블 존재, 현재 프로그램보다 최신 버전(모르는 마이그레이션)의 백업이 아닌지
+  3. 복원 대기 파일로 둔다. 실행 중인 DB는 바꾸지 않는다.
+  4. **서버 재시작 시 적용**한다. 적용 직전 DB는 `backups/before-restore-<시각>.db`로 자동 보관하고, 오래된 백업은 `prisma migrate deploy`로 최신 구조가 된다.
+  5. Docker에서는 서버가 스스로 종료하고 재시작 정책으로 다시 올라오며 적용된다.
+- 백업 안의 로그인 세션은 복원 시 제거한다 (복원 후 모두 다시 로그인).
+- 대기 중인 복원은 취소할 수 있다.
 
 ### F12. 감독표 배포 API *(추가)*
 - 외부 시스템(학교 홈페이지, 메신저 봇 등)이 월별·날짜별 1·2·3학년 감독 교사를 JSON으로 받아 가는 API.
@@ -545,8 +561,12 @@ interface HardRule {       // 후보 제외 규칙
 | GET/POST | /api/api-clients | API 연동 계정 목록·생성 (생성 시 키 1회 반환) | ADMIN |
 | POST | /api/api-clients/:id/regenerate | 키 재발급 | ADMIN |
 | PUT/DELETE | /api/api-clients/:id | 연동 계정 수정(이름·활성)·삭제 | ADMIN |
-| GET/POST | /api/backup | DB 백업/복원 | ADMIN |
-| GET/PUT | /api/settings | 시스템 설정 | ADMIN |
+| GET | /api/backup | DB 백업 파일 다운로드 | ADMIN |
+| GET | /api/backup/restore | 복원 대기 상태 | ADMIN |
+| POST | /api/backup/restore | 복원 준비 (본문: DB 파일 `application/octet-stream`, 헤더 `X-Admin-Pin`) | ADMIN |
+| DELETE | /api/backup/restore | 대기 중인 복원 취소 | ADMIN |
+| GET | /api/health | 헬스 체크 (Docker) | 공개 |
+| ~~GET/PUT~~ | ~~/api/settings~~ | 시스템 설정 — 설정 항목이 정의되지 않아 보류 | ADMIN |
 
 - `/api/auth/teachers`, `/api/auth/login`을 제외한 모든 `/api/*`는 세션 미들웨어로 보호하고, 권한 열의 조건을 서버 미들웨어로 검사한다.
 - `/api/public/*`만 API 연동 계정 키(`X-API-Key`)를 받는다. 그 밖의 경로에 키를 보내면 `403`이다.
@@ -560,7 +580,8 @@ interface HardRule {       // 후보 제외 규칙
 - 모든 날짜는 **Asia/Seoul** 기준, 문자열 `YYYY-MM-DD`로 처리 (Date 객체 타임존 오류 주의).
 - 입력값 검증: 서버에서 zod로 검증.
 - 에러 메시지는 한국어로 사용자에게 표시.
-- DB 파일은 Docker 볼륨에 저장하여 컨테이너 재시작 시 유지.
+- DB 파일은 Docker 볼륨에 저장하여 컨테이너 재시작 시 유지. 로그인 세션도 DB에 저장해 재시작 후 유지.
+- SQLite는 WAL 모드로 운영한다 (서버 시작 시 설정).
 - API 연동 키는 해시로만 저장한다.
 
 ---
@@ -591,9 +612,12 @@ interface HardRule {       // 후보 제외 규칙
 ### 추가 개발 (Phase 5 이후) ✅ 완료
 - F12 감독표 배포 API + API 연동 계정, 학년 단위 특별 일정.
 
-### Phase 6 — 배포
-- Dockerfile, docker-compose, 백업/복원(F11), README(설치·운영 방법, PowerShell 명령 기준).
+### Phase 6 — 배포 ✅ 구현 완료 (Docker 실행 확인은 배포 서버에서)
+- Dockerfile, docker-compose, 백업/복원(F11), README(설치·운영 방법, PowerShell 명령 기준), 로그인 세션 DB 저장.
 - ✅ 완료 기준: `docker compose up -d`로 실행, 재시작 후 데이터 유지.
+- 참고: 개발 PC에 Docker가 없어, 컨테이너와 같은 시작 절차(복원 적용 → 마이그레이션 → 운영 모드 서버)를 Docker 없이
+  재현해 검증했다 (빈 볼륨 설치, 강제 종료 후 재시작 시 데이터·로그인 유지, 백업·복원·자동 재시작).
+  실제 `docker compose up -d`는 배포 서버에서 확인한다.
 
 ---
 

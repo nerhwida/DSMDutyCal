@@ -12,8 +12,13 @@ DutyCal — 학교 자율학습 감독 편성 시스템. 전체 명세는 `REQUI
 - Phase 3: 스케줄러 엔진, 편성·확정·달력 조회 API
 - Phase 4: 달력 UI, F6 관리 변경, F1-2 넘기기·맞교환, F1-3 내 감독 화면, 알림
 - Phase 5: 기간 통계, 월 마감·해제, 인쇄, 변경 이력, 부분 재편성
+- Phase 6: Docker 배포, 백업/복원(F11), 로그인 세션 DB 저장 — 개발 PC에 Docker가 없어 실제
+  `docker compose up`은 배포 서버에서 확인한다 (아래 "배포·백업" 참고)
 
-Phase 6(배포·백업)은 아직 구현하지 않았다.
+git 저장소: https://github.com/nerhwida/DSMDutyCal (공개). 커밋 작성자는 저장소 로컬 설정
+`DSM DutyCal <280956040+nerhwida@users.noreply.github.com>`을 쓴다 (학교 이메일 노출 방지).
+git은 PATH에 없을 수 있으니 `C:\Program Files\Git\cmd\git.exe`로 실행한다. 커밋은 기능 단위로 나누고
+`feat:`/`fix:`/`test:`/`docs:` 접두어를 쓴다.
 
 **프로젝트 오너가 결정한 범위 변경** (REQUIREMENTS.md "개정 이력"에 반영됨. 다시 추가하지 말 것):
 - Excel 출력 없음 (F9 Excel과 `exceljs` 의존성 제외).
@@ -243,9 +248,38 @@ REQUIREMENTS.md의 데이터 모델(§4)에는 `Teacher.sortOrder` 하나만 있
   - 그리드 외 모든 요소는 `print:hidden`이고, 셀은 `print:min-h-[64px]`로 줄어든다.
   - 헤드리스 Chrome PDF로 5주짜리 달과 6주짜리 달 모두 1페이지임을 확인했다. 행이나 셀 내용을
     추가하면 다시 확인한다.
-- `test.db`는 **WAL 모드**로 동작한다 (`globalSetup.ts`에서 설정). 기본 롤백 저널에서는 이 Windows
-  PC에서 쓰기 한 건이 수 초까지 튀어 15초 테스트 타임아웃이 무작위로 났다. dev.db는 건드리지
-  않았다. WAL은 `-wal`/`-shm` 파일을 추가하므로 F11 백업 설계와 함께 결정한다.
+- **모든 DB는 WAL 모드**다. 서버는 시작 시(`index.ts`), 테스트는 `globalSetup.ts`에서 설정한다. 기본 롤백
+  저널에서는 이 Windows PC에서 쓰기 한 건이 수 초까지 튀어 15초 테스트 타임아웃이 무작위로 났다. WAL이라
+  DB 파일만 복사하면 최신 내용이 빠질 수 있으므로, 백업은 반드시 앱 기능(`VACUUM INTO`)을 쓴다.
+
+### 배포·백업 (Phase 6)
+- **단일 컨테이너**(`Dockerfile`, `docker-compose.yml`)
+  - 서버가 `CLIENT_DIST`의 빌드된 화면도 제공하고, API가 아닌 경로는 index.html로 보낸다(SPA).
+  - DB는 볼륨 `/data/dutycal.db`에 있다.
+  - `docker/entrypoint.sh` 순서: `prestart.js`(대기 중인 복원 적용) → `prisma migrate deploy` → 서버.
+    그래서 `prisma`는 server의 **dependencies**에 있다 (devDependencies로 옮기지 말 것).
+  - 학교망 TLS 가로채기에 대비해 이미지는 `docker/certs/*.crt`를 신뢰하고 `NODE_OPTIONS=--use-system-ca`를 쓴다.
+  - Windows에서 만든 스크립트가 컨테이너에서 깨지지 않도록 `.gitattributes`로 LF를 강제한다.
+- **로그인 세션은 DB(`Session` 테이블)에 저장**한다 (`auth/prismaSessionStore.ts`).
+  - 재시작해도 로그인이 유지된다.
+  - rolling 세션의 touch는 만료가 5분 이상 늘어날 때만 쓴다.
+  - HTTPS면 `COOKIE_SECURE=true`, 프록시 뒤면 `TRUST_PROXY=1`로 설정한다.
+- **백업/복원** (`services/backupService.ts`, `lib/dbFile.ts`, `routes/backup.routes.ts`)
+  - **백업**은 `VACUUM INTO`로 서비스 중에도 일관된 스냅샷을 만든다.
+  - **복원**은 사용 중인 DB 파일을 실행 중에 바꾸지 않는다. 절차는 다음과 같다.
+    - 업로드한 파일을 검증한다: 헤더, 필수 테이블, 모르는 마이그레이션이면 거부.
+    - 백업 안의 `Session` 행을 삭제한다.
+    - `restore-pending.db`(DB와 같은 디렉터리)로 둔다.
+  - **다음 시작 때** `applyPendingRestore()`가 현재 DB(+`-wal`/`-shm`)를 `backups/before-restore-<시각>.db`로
+    보관하고 교체한다. 이어서 migrate deploy가 오래된 백업을 최신 구조로 올린다.
+  - `RESTART_ON_RESTORE=true`(Docker)면 응답 후 `process.exit(0)` → `restart: unless-stopped`로 자동
+    재시작한다. 개발 환경에서는 수동으로 재시작하고 `migrate deploy`를 실행해야 한다.
+  - 상대 경로 `DATABASE_URL`은 schema.prisma 디렉터리(`server/prisma`) 기준으로 해석된다. `dbFile.ts`의
+    `PRISMA_DIR`은 src와 dist 양쪽에서 같은 위치가 되도록 `../../prisma`로 계산한다.
+- **검증 방법(Docker 없이):** `npm run build` 후 entrypoint와 같은 3단계를 같은 환경변수로 실행해 확인했다.
+  확인 항목은 빈 볼륨 설치, 강제 종료 후 데이터·세션 유지, 백업 → 복원 → 자동 종료 → 재시작 시 적용이다.
+  PowerShell 5.1로 한글 환경변수를 `.ps1`에서 설정하면 UTF-8 BOM이 없을 때 깨지므로 주의한다
+  (실제 배포는 compose의 `.env`가 UTF-8로 읽혀 문제없다).
 
 ### 테스트 전략 (서버)
 - `vitest.config.ts`는 `fileParallelism: false`로 설정되어 있다.
@@ -254,7 +288,8 @@ REQUIREMENTS.md의 데이터 모델(§4)에는 `Teacher.sortOrder` 하나만 있
     "database is locked" 타임아웃이 난다.
   - 파일별 DB로 바꾸기 전에는 병렬 실행을 다시 켜지 않는다.
 - `src/test/globalSetup.ts`는 테스트 실행마다 한 번 돈다.
-  - `test.db`를 지우고 `prisma db push`를 실행한 뒤, 고정 픽스처를 하드코딩된 PIN으로 시드한다.
+  - `test.db`를 지우고 **`prisma migrate deploy`**(실제 마이그레이션, `_prisma_migrations` 포함 — 백업/복원
+    검증에 필요)를 실행한 뒤, WAL로 바꾸고 고정 픽스처를 하드코딩된 PIN으로 시드한다.
     픽스처: 관리자, `1학년부장`/`2학년부장`/`3학년부장`, `평교사`, `비활성교사`.
   - 이 이름들은 여러 테스트 파일이 쓰는 **공유 가변 픽스처**다.
   - 테스트가 전역 상태를 바꿔야 하면(학년부장 지정, 교사 삭제 등) 공유 픽스처를 바꾸지 말고 그
