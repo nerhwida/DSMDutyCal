@@ -9,6 +9,7 @@ import { TeacherManagementPage } from './TeacherManagementPage';
 import { SpecialDaysPage } from './SpecialDaysPage';
 import { InitialCountsPage } from './InitialCountsPage';
 import { ApiClientsPage } from './ApiClientsPage';
+import { SettingsPage } from './SettingsPage';
 
 type Tab =
   | 'calendar'
@@ -18,7 +19,8 @@ type Tab =
   | 'teachers'
   | 'special-days'
   | 'initial-counts'
-  | 'api-clients';
+  | 'api-clients'
+  | 'settings';
 
 export function HomePage() {
   const { user, logout } = useAuth();
@@ -36,6 +38,7 @@ export function HomePage() {
     { key: 'special-days', label: '일정 관리', visible: true },
     { key: 'initial-counts', label: '초기 누계', visible: user.isAdmin },
     { key: 'api-clients', label: 'API 연동', visible: user.isAdmin },
+    { key: 'settings', label: '설정', visible: user.isAdmin },
   ];
 
   return (
@@ -82,6 +85,7 @@ export function HomePage() {
         {tab === 'special-days' && <SpecialDaysPage />}
         {tab === 'initial-counts' && user.isAdmin && <InitialCountsPage />}
         {tab === 'api-clients' && user.isAdmin && <ApiClientsPage />}
+        {tab === 'settings' && user.isAdmin && <SettingsPage />}
       </main>
     </div>
   );

@@ -42,6 +42,9 @@ export const AUDIT_ACTIONS = [
   'REGENERATE_API_KEY',
   'UPDATE_API_CLIENT',
   'DELETE_API_CLIENT',
+  'BACKUP',
+  'RESTORE_STAGED',
+  'RESTORE_CANCELLED',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

@@ -18,8 +18,9 @@ export default async function setup() {
 
   removeTestDb();
 
-  // 스키마를 테스트 DB에 반영 (마이그레이션 이력 없이 push로 빠르게 동기화).
-  execSync('npx prisma db push --skip-generate --accept-data-loss', {
+  // 실제 마이그레이션을 빈 DB에 적용한다. 운영 DB와 같은 구조(_prisma_migrations 포함)가 되어
+  // 백업/복원 검증을 테스트할 수 있고, 마이그레이션 자체도 매번 검증된다.
+  execSync('npx prisma migrate deploy', {
     cwd: path.resolve(import.meta.dirname, '../..'),
     env: { ...process.env, DATABASE_URL },
     stdio: 'inherit',
