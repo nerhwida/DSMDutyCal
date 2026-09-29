@@ -265,7 +265,9 @@ REQUIREMENTS.md의 데이터 모델(§4)에는 `Teacher.sortOrder` 하나만 있
   - rolling 세션의 touch는 만료가 5분 이상 늘어날 때만 쓴다.
   - HTTPS면 `COOKIE_SECURE=true`, 프록시 뒤면 `TRUST_PROXY=1`로 설정한다.
 - **백업/복원** (`services/backupService.ts`, `lib/dbFile.ts`, `routes/backup.routes.ts`)
-  - **백업**은 `VACUUM INTO`로 서비스 중에도 일관된 스냅샷을 만든다.
+  - **백업**은 `VACUUM INTO`로 서비스 중에도 일관된 스냅샷을 만든다(`writeSnapshot`). 수동·월초 자동 백업 모두
+    스냅샷에서 `Session`을 지운 뒤 **VACUUM**까지 한다. DELETE만 하면 빈 페이지에 세션 ID 바이트가 남는다.
+    테스트가 파일 바이트에 sid가 없는지 확인한다.
   - **복원**은 사용 중인 DB 파일을 실행 중에 바꾸지 않는다. 절차는 다음과 같다.
     - 업로드한 파일을 검증한다: 헤더, 필수 테이블, 모르는 마이그레이션이면 거부.
     - 백업 안의 `Session` 행을 삭제한다.
