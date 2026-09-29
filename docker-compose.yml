@@ -1,0 +1,27 @@
+# DutyCal 배포 (단일 컨테이너 + SQLite 볼륨)
+#   준비: .env.example → .env 복사 후 SESSION_SECRET, ADMIN_INITIAL_PIN 등 수정
+#   실행: docker compose up -d --build
+#   접속: http://<서버주소>:<DUTYCAL_PORT, 기본 8080>
+services:
+  dutycal:
+    build: .
+    image: dutycal:latest
+    container_name: dutycal
+    # 백업 복원 시 서버가 스스로 종료하면 자동으로 다시 시작되어 복원이 적용된다.
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # 컨테이너 안 경로 (.env의 개발용 값을 덮어쓴다)
+      NODE_ENV: production
+      DATABASE_URL: file:/data/dutycal.db
+      PORT: "4000"
+      CLIENT_DIST: /app/client/dist
+      RESTART_ON_RESTORE: "true"
+    ports:
+      - "${DUTYCAL_PORT:-8080}:4000"
+    volumes:
+      # DB·자동 보관 백업이 저장되는 볼륨. 컨테이너를 지우거나 다시 만들어도 유지된다.
+      - dutycal-data:/data
+
+volumes:
+  dutycal-data:

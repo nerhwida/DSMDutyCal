@@ -1,0 +1,20 @@
+# 이미지 빌드에 필요 없는 파일 (비밀 정보·DB·빌드 산출물은 절대 포함하지 않는다)
+.git
+.gitignore
+.gitattributes
+.claude
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+**/.env
+.env*
+!.env.example
+**/*.db
+**/*.db-*
+server/prisma/backups
+server/prisma/restore-pending.db
+coverage
+*.log
+docker-compose.yml
+Dockerfile
+.dockerignore
