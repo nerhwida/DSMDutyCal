@@ -29,6 +29,11 @@ export function backupsDir(dbPath = databaseFilePath()): string {
   return path.join(path.dirname(dbPath), 'backups');
 }
 
+/** 월초 자동 백업 보관 디렉터리 (backups/monthly). */
+export function monthlyBackupsDir(dbPath = databaseFilePath()): string {
+  return path.join(backupsDir(dbPath), 'monthly');
+}
+
 /** 로컬에 있는 마이그레이션 이름 목록 (백업이 더 최신 버전의 것인지 판단용). */
 export function localMigrationNames(): string[] {
   if (!existsSync(MIGRATIONS_DIR)) return [];

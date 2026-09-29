@@ -4,7 +4,14 @@ import { prisma } from '../lib/prisma.js';
 import { handle } from '../lib/http.js';
 import { verifyPin } from '../auth/pin.js';
 import { requireAdmin, requireAuth } from '../permissions/middleware.js';
-import { cancelRestore, createBackupFile, restoreStatus, stageRestore } from '../services/backupService.js';
+import {
+  cancelRestore,
+  createBackupFile,
+  listMonthlyBackups,
+  monthlyBackupPath,
+  restoreStatus,
+  stageRestore,
+} from '../services/backupService.js';
 
 /** DB 백업/복원 (F11, ADMIN 전용). */
 export const backupRouter = Router();
@@ -18,6 +25,19 @@ backupRouter.get(
   handle(async (req, res) => {
     const { filePath, fileName } = await createBackupFile(req.user!.id);
     res.download(filePath, fileName, () => rmSync(filePath, { force: true }));
+  }),
+);
+
+/** GET /api/backup/monthly — 월초 자동 백업 목록 (최신 월부터). */
+backupRouter.get('/monthly', (_req, res) => {
+  res.json(listMonthlyBackups());
+});
+
+/** GET /api/backup/monthly/:fileName — 자동 백업 파일 다운로드. */
+backupRouter.get(
+  '/monthly/:fileName',
+  handle(async (req, res) => {
+    res.download(monthlyBackupPath(req.params.fileName), req.params.fileName);
   }),
 );
 

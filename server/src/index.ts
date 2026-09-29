@@ -3,6 +3,7 @@ import { createApp } from './app.js';
 import { ensureBootstrapAdmin } from './auth/authService.js';
 import { applyPendingRestore } from './lib/dbFile.js';
 import { prisma } from './lib/prisma.js';
+import { startMonthlyBackupScheduler } from './services/backupService.js';
 
 const PORT = Number(process.env.PORT ?? '4000');
 
@@ -21,6 +22,9 @@ async function main() {
   // WAL 모드: 읽기와 쓰기가 서로 막지 않고, Windows에서 쓰기 지연이 크게 줄어든다 (DB 파일에 영구 저장).
   await prisma.$queryRawUnsafe('PRAGMA journal_mode=WAL;');
   await ensureBootstrapAdmin();
+
+  // F11: 월초 자동 백업 (시작 시 1회 + 매시간 확인, 이번 달 몫이 없으면 전월 기준으로 생성)
+  startMonthlyBackupScheduler();
 
   const app = createApp();
   const server = app.listen(PORT, () => {

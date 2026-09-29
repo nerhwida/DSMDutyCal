@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { copyFileSync, existsSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { recordAudit } from '../lib/audit.js';
-import { localMigrationNames, pendingRestorePath, timestampForFile } from '../lib/dbFile.js';
+import { localMigrationNames, monthlyBackupsDir, pendingRestorePath, timestampForFile } from '../lib/dbFile.js';
 import { ServiceError } from './schedulerService.js';
 
 const SQLITE_HEADER = Buffer.from('SQLite format 3\0', 'latin1');
@@ -23,6 +23,96 @@ export async function createBackupFile(actorId: number): Promise<{ filePath: str
   await prisma.$executeRawUnsafe(`VACUUM INTO ${sqlString(filePath)}`);
   await recordAudit(actorId, 'BACKUP', { size: statSync(filePath).size });
   return { filePath, fileName: `dutycal-backup-${timestampForFile()}.db` };
+}
+
+// ---------------------------------------------------------------------------
+// 월초 자동 백업: 매달 1일(이후 처음 확인할 때) 전월 기준 스냅샷을 backups/monthly에 남긴다.
+// ---------------------------------------------------------------------------
+
+const MONTHLY_FILE = /^monthly-(\d{4})-(\d{2})\.db$/;
+const DEFAULT_KEEP = 24;
+
+/** Asia/Seoul 기준 전월 'YYYY-MM' (백업 파일 이름에 쓰는 "대상 월"). */
+export function previousMonthLabel(now = new Date()): string {
+  const [y, m] = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit' })
+    .format(now)
+    .split('-')
+    .map(Number);
+  const prev = m === 1 ? { y: y - 1, m: 12 } : { y, m: m - 1 };
+  return `${prev.y}-${String(prev.m).padStart(2, '0')}`;
+}
+
+function keepCount(): number {
+  const n = Number(process.env.AUTO_BACKUP_KEEP ?? DEFAULT_KEEP);
+  return Number.isInteger(n) && n >= 1 ? n : DEFAULT_KEEP;
+}
+
+/**
+ * 이번 달 몫(전월 기준) 자동 백업이 없으면 만든다. 이미 있으면 null.
+ * 서버가 매달 1일에 꺼져 있었더라도 켜진 뒤 처음 확인할 때 만든다.
+ */
+export async function ensureMonthlyBackup(now = new Date(), keep = keepCount()): Promise<string | null> {
+  const dir = monthlyBackupsDir();
+  const file = path.join(dir, `monthly-${previousMonthLabel(now)}.db`);
+  if (existsSync(file)) return null;
+
+  mkdirSync(dir, { recursive: true });
+  const tmp = `${file}.tmp`;
+  rmSync(tmp, { force: true });
+  await prisma.$executeRawUnsafe(`VACUUM INTO ${sqlString(tmp)}`);
+  renameSync(tmp, file); // 완성된 파일만 목록에 보이도록
+  pruneMonthlyBackups(keep);
+  return file;
+}
+
+/** 최근 keep개월분만 남기고 오래된 자동 백업을 지운다. */
+export function pruneMonthlyBackups(keep = keepCount()): string[] {
+  const files = listMonthlyBackups().map((b) => b.fileName); // 최신순
+  const removed = files.slice(Math.max(1, keep));
+  for (const name of removed) rmSync(path.join(monthlyBackupsDir(), name), { force: true });
+  return removed;
+}
+
+/** 자동 백업 목록 (최신 월부터). */
+export function listMonthlyBackups() {
+  const dir = monthlyBackupsDir();
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((name) => MONTHLY_FILE.test(name))
+    .sort()
+    .reverse()
+    .map((fileName) => {
+      const stat = statSync(path.join(dir, fileName));
+      return { fileName, month: fileName.slice('monthly-'.length, -'.db'.length), size: stat.size, createdAt: stat.mtime.toISOString() };
+    });
+}
+
+/** 다운로드할 자동 백업 파일 경로 (파일 이름 형식 검증으로 경로 조작 차단). */
+export function monthlyBackupPath(fileName: string): string {
+  if (!MONTHLY_FILE.test(fileName)) throw new ServiceError(400, '자동 백업 파일 이름이 올바르지 않습니다.');
+  const file = path.join(monthlyBackupsDir(), fileName);
+  if (!existsSync(file)) throw new ServiceError(404, '해당 자동 백업이 없습니다.');
+  return file;
+}
+
+/**
+ * 서버 시작 시 1회 + 매시간 확인한다. 실패해도 서버는 계속 동작한다 (로그만 남김).
+ */
+export function startMonthlyBackupScheduler(intervalMs = 60 * 60 * 1000) {
+  const run = async () => {
+    try {
+      const file = await ensureMonthlyBackup();
+      if (file) {
+        // eslint-disable-next-line no-console
+        console.log(`[auto-backup] 월간 백업 생성: ${file}`);
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[auto-backup] 월간 백업 실패:', err);
+    }
+  };
+  void run();
+  return setInterval(run, intervalMs).unref();
 }
 
 /**

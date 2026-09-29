@@ -1,12 +1,18 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import request from 'supertest';
 import { PrismaClient } from '@prisma/client';
 import { createApp } from '../app.js';
 import { findTeacherId } from '../test/helpers.js';
-import { applyPendingRestore, backupsDir, pendingRestorePath } from '../lib/dbFile.js';
+import { applyPendingRestore, backupsDir, monthlyBackupsDir, pendingRestorePath } from '../lib/dbFile.js';
+import {
+  ensureMonthlyBackup,
+  listMonthlyBackups,
+  previousMonthLabel,
+  pruneMonthlyBackups,
+} from '../services/backupService.js';
 
 const app = createApp();
 const ADMIN_PIN = process.env.ADMIN_INITIAL_PIN!;
@@ -121,6 +127,69 @@ describe('DB 백업/복원 (F11)', () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toContain('최신 버전');
     rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe('월초 자동 백업', () => {
+  // test.db와 dev.db가 같은 server/prisma 폴더를 쓰므로 backups/monthly도 공유된다.
+  // 개발 중 생긴 실제 자동 백업을 건드리지 않도록 먼 미래·과거 월만 쓰고, 만든 파일만 지운다.
+  const created: string[] = [];
+  afterEach(() => {
+    for (const name of created.splice(0)) rmSync(path.join(monthlyBackupsDir(), name), { force: true });
+  });
+
+  it('전월 라벨은 Asia/Seoul 기준이다', () => {
+    expect(previousMonthLabel(new Date('2026-10-01T00:30:00+09:00'))).toBe('2026-09');
+    expect(previousMonthLabel(new Date('2026-09-30T16:00:00Z'))).toBe('2026-09'); // 한국 10/1 01:00
+    expect(previousMonthLabel(new Date('2027-01-05T12:00:00+09:00'))).toBe('2026-12');
+  });
+
+  it('이번 달 몫이 없으면 전월 기준 백업을 만들고, 이미 있으면 다시 만들지 않는다', async () => {
+    const now = new Date('2099-03-01T09:00:00+09:00');
+    const file = await ensureMonthlyBackup(now, 1000);
+    created.push('monthly-2099-02.db');
+    expect(file).toMatch(/monthly-2099-02\.db$/);
+    expect(readFileSync(file!).subarray(0, 15).toString('latin1')).toBe('SQLite format 3');
+    expect(existsSync(`${file}.tmp`)).toBe(false);
+
+    expect(await ensureMonthlyBackup(new Date('2099-03-20T09:00:00+09:00'), 1000)).toBeNull();
+  });
+
+  it('보관 개수를 넘으면 오래된 월부터 지운다', () => {
+    const dir = monthlyBackupsDir();
+    mkdirSync(dir, { recursive: true });
+    const fakes = ['2001-01', '2001-02', '2001-03'].map((m) => `monthly-${m}.db`);
+    for (const name of fakes) {
+      writeFileSync(path.join(dir, name), 'x');
+      created.push(name);
+    }
+    const total = listMonthlyBackups().length;
+    const removed = pruneMonthlyBackups(total - 2);
+    expect(removed.sort()).toEqual(['monthly-2001-01.db', 'monthly-2001-02.db']);
+    expect(existsSync(path.join(dir, 'monthly-2001-03.db'))).toBe(true);
+  });
+
+  it('ADMIN은 목록을 보고 내려받을 수 있고, 잘못된 파일 이름은 거부된다', async () => {
+    await ensureMonthlyBackup(new Date('2098-07-01T09:00:00+09:00'), 1000);
+    created.push('monthly-2098-06.db');
+    const admin = await adminAgent();
+
+    const list = await admin.get('/api/backup/monthly');
+    expect(list.status).toBe(200);
+    const item = list.body.find((b: { fileName: string }) => b.fileName === 'monthly-2098-06.db');
+    expect(item).toMatchObject({ month: '2098-06' });
+    expect(item.size).toBeGreaterThan(0);
+
+    const dl = await admin.get('/api/backup/monthly/monthly-2098-06.db').buffer(true).parse(binaryParser);
+    expect(dl.status).toBe(200);
+    expect((dl.body as Buffer).subarray(0, 15).toString('latin1')).toBe('SQLite format 3');
+
+    expect((await admin.get('/api/backup/monthly/..%2F..%2Fdev.db')).status).toBe(400);
+    expect((await admin.get('/api/backup/monthly/monthly-1999-01.db')).status).toBe(404);
+
+    const teacher = request.agent(app);
+    await teacher.post('/api/auth/login').send({ teacherId: await findTeacherId('평교사'), pin: '4444' });
+    expect((await teacher.get('/api/backup/monthly')).status).toBe(403);
   });
 });
 
