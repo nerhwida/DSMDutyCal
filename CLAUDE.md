@@ -274,6 +274,13 @@ REQUIREMENTS.md의 데이터 모델(§4)에는 `Teacher.sortOrder` 하나만 있
     보관하고 교체한다. 이어서 migrate deploy가 오래된 백업을 최신 구조로 올린다.
   - `RESTART_ON_RESTORE=true`(Docker)면 응답 후 `process.exit(0)` → `restart: unless-stopped`로 자동
     재시작한다. 개발 환경에서는 수동으로 재시작하고 `migrate deploy`를 실행해야 한다.
+  - **월초 자동 백업**(`ensureMonthlyBackup`/`startMonthlyBackupScheduler`)
+    - 서버 시작 시와 매시간 확인한다. 이번 달 몫(`monthly-<전월>.db`, Asia/Seoul 기준)이 없으면
+      `backups/monthly`에 만들고, `AUTO_BACKUP_KEEP`(기본 24)개만 남긴다.
+    - `.tmp`로 만든 뒤 rename해서, 목록에는 완성된 파일만 보이게 한다.
+    - 스케줄러는 `index.ts`에서만 시작하므로 테스트에서는 돌지 않는다.
+    - **test.db와 dev.db가 같은 `server/prisma` 폴더라 `backups/monthly`를 공유한다.** 테스트는 먼 미래·과거
+      월만 쓰고 자기가 만든 파일만 지운다 (디렉터리 통째로 지우지 말 것).
   - 상대 경로 `DATABASE_URL`은 schema.prisma 디렉터리(`server/prisma`) 기준으로 해석된다. `dbFile.ts`의
     `PRISMA_DIR`은 src와 dist 양쪽에서 같은 위치가 되도록 `../../prisma`로 계산한다.
 - **검증 방법(Docker 없이):** `npm run build` 후 entrypoint와 같은 3단계를 같은 환경변수로 실행해 확인했다.
