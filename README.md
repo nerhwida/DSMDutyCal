@@ -339,3 +339,9 @@ docker compose cp dutycal:/data/backups ./backups-from-container
 
 - [REQUIREMENTS.md](REQUIREMENTS.md) — 기능·데이터 모델·API·권한 매트릭스 전체 명세와 개정 이력
 - [CLAUDE.md](CLAUDE.md) — 개발 시 알아야 할 설계 결정과 주의사항
+
+---
+
+## 라이선스
+
+[MIT License](LICENSE)
