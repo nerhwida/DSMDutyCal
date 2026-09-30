@@ -187,6 +187,28 @@ export function CalendarPage() {
     }
   }
 
+  async function resetPlan() {
+    const confirmedNote = actionStatus === 'CONFIRMED' ? ' 확정된 월이므로 배정되어 있던 교사들에게 알림이 발송되고,' : '';
+    if (
+      !window.confirm(
+        `${ym.month}월 ${actionGrade}학년 감독 배정을 모두 해제하고 미편성 상태로 되돌릴까요?${confirmedNote} 변경 이력도 함께 삭제되며 되돌릴 수 없습니다.`,
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post(`/api/months/${ym.year}/${ym.month}/grades/${actionGrade}/reset`);
+      setResult(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '감독 초기화에 실패했습니다.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function openTool(kind: 'regenerate' | 'reopen', e: React.MouseEvent<HTMLButtonElement>) {
     setToolPopover({ kind, anchor: e.currentTarget.getBoundingClientRect() });
   }
@@ -264,6 +286,15 @@ export function CalendarPage() {
                 className="rounded border border-slate-400 px-3 py-1.5 text-slate-700 hover:bg-slate-100 disabled:opacity-40"
               >
                 부분 재편성
+              </button>
+            )}
+            {(actionStatus === 'DRAFT' || actionStatus === 'CONFIRMED') && (
+              <button
+                onClick={resetPlan}
+                disabled={busy}
+                className="rounded border border-red-400 px-3 py-1.5 text-red-700 hover:bg-red-50 disabled:opacity-40"
+              >
+                감독 초기화
               </button>
             )}
             {actionStatus === 'CONFIRMED' && (

@@ -57,7 +57,7 @@ function cell(date: string, grade: number, teacherId: number, extra: { originalT
 const reload = (id: number) => prisma.assignment.findUniqueOrThrow({ where: { id } });
 
 describe('월 마감 (F8)', () => {
-  it('마감된 월은 재편성·셀 변경·본인 교체·특별 일정 등록이 모두 차단된다 (Phase 5 완료 기준)', async () => {
+  it('마감된 월은 재편성·셀 변경·초기화·본인 교체·특별 일정 등록이 모두 차단된다 (Phase 5 완료 기준)', async () => {
     const a = await newTeacher('마감A');
     const b = await newTeacher('마감B');
     await setPlan(2033, 2, 1, 'CONFIRMED');
@@ -72,6 +72,7 @@ describe('월 마감 (F8)', () => {
     expect((await head1.post('/api/months/2033/2/grades/1/generate')).status).toBe(409);
     expect((await head1.post('/api/months/2033/2/grades/1/regenerate').send({ from: '2033-02-01', to: '2033-02-01' })).status).toBe(409);
     expect((await head1.put(`/api/assignments/${x.id}`).send({ teacherId: b.id })).status).toBe(409);
+    expect((await head1.post('/api/months/2033/2/grades/1/reset')).status).toBe(409);
     expect((await a.agent.post(`/api/assignments/${x.id}/transfer`).send({ toTeacherId: b.id, confirmWarnings: true })).status).toBe(409);
 
     const admin = await adminAgent();
@@ -113,6 +114,50 @@ describe('월 마감 (F8)', () => {
 
     const audit = await prisma.auditLog.findMany({ where: { action: 'REOPEN' } });
     expect(audit.some((l) => JSON.parse(l.target).month === 12 && JSON.parse(l.target).year === 2033)).toBe(true);
+  });
+});
+
+describe('감독 초기화 (학년 단위)', () => {
+  it('확정 월의 해당 학년 배정·이력을 모두 지우고 미편성으로 되돌리며, 배정되어 있던 교사에게 알린다', async () => {
+    const a = await newTeacher('초기화A', [1]);
+    const b = await newTeacher('초기화B', [1, 2]);
+    await setPlan(2037, 1, 1, 'CONFIRMED');
+    await setPlan(2037, 1, 2, 'CONFIRMED');
+    const x = await cell('2037-01-01', 1, a.id);
+    await cell('2037-01-02', 1, b.id);
+    const other = await cell('2037-01-01', 2, b.id); // 다른 학년 → 유지
+    await prisma.assignmentHistory.create({ data: { assignmentId: x.id, fromTeacherId: b.id, toTeacherId: a.id, changedById: a.id, changedByRole: 'TEACHER' } });
+
+    const head1 = await loginFixture('1학년부장', '1111');
+    const res = await head1.post('/api/months/2037/1/grades/1/reset');
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ status: 'EMPTY', removedCount: 2 });
+
+    expect(await prisma.assignment.count({ where: { grade: 1, date: { gte: '2037-01-01', lte: '2037-01-31' } } })).toBe(0);
+    expect(await prisma.assignmentHistory.count({ where: { assignmentId: x.id } })).toBe(0);
+    expect((await reload(other.id)).teacherId).toBe(b.id);
+    const plan = await prisma.monthPlan.findUniqueOrThrow({ where: { year_month_grade: { year: 2037, month: 1, grade: 1 } } });
+    expect(plan).toMatchObject({ status: 'EMPTY', confirmedAt: null });
+    expect(await prisma.notification.count({ where: { teacherId: { in: [a.id, b.id] }, type: 'MONTH_RESET' } })).toBe(2);
+
+    // 초기화 후에는 다시 자동 편성할 수 있고, 다시 초기화하면 편성된 감독이 없다는 409
+    expect((await head1.post('/api/months/2037/1/grades/1/reset')).status).toBe(409);
+    expect((await head1.post('/api/months/2037/1/grades/1/generate')).status).toBe(200);
+  });
+
+  it('DRAFT 월은 알림 없이 초기화되고, 담당 학년이 아니거나 일반 교사면 403', async () => {
+    const a = await newTeacher('초안초기화', [1]);
+    await setPlan(2037, 2, 1, 'DRAFT');
+    await cell('2037-02-01', 1, a.id);
+
+    expect((await (await loginFixture('2학년부장', '2222')).post('/api/months/2037/2/grades/1/reset')).status).toBe(403);
+    expect((await (await loginFixture('평교사', '4444')).post('/api/months/2037/2/grades/1/reset')).status).toBe(403);
+
+    const admin = await adminAgent();
+    const res = await admin.post('/api/months/2037/2/grades/1/reset');
+    expect(res.status).toBe(200);
+    expect(res.body.removedCount).toBe(1);
+    expect(await prisma.notification.count({ where: { teacherId: a.id, type: 'MONTH_RESET' } })).toBe(0);
   });
 });
 

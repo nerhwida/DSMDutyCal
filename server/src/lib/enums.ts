@@ -24,6 +24,7 @@ export const NOTIFICATION_TYPES = [
   'REMOVED_BY_CHANGE',
   'SWAPPED',
   'MONTH_CONFIRMED',
+  'MONTH_RESET',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -33,6 +34,7 @@ export const AUDIT_ACTIONS = [
   'CONFIRM',
   'CLOSE',
   'REOPEN',
+  'RESET',
   'SET_GRADE_HEAD',
   'RESET_PIN',
   'CREATE_TEACHER',

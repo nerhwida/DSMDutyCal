@@ -453,6 +453,49 @@ export async function closeMonthPlan(year: number, month: number, grade: Grade, 
   return { year, month, grade, status: 'CLOSED' as const };
 }
 
+/**
+ * 감독 초기화 (학년 단위). 해당 월·학년의 배정을 모두 지우고 미편성(EMPTY)으로 되돌린다.
+ * DRAFT·CONFIRMED만 가능하고 마감 월은 막는다. 배정 이력도 함께 지워지며(생성 편성과 동일),
+ * 확정 월이면 배정되어 있던 교사들에게 알린다.
+ */
+export async function resetMonthPlan(year: number, month: number, grade: Grade, actorId: number) {
+  const status = await getPlanStatus(year, month, grade);
+  if (status === 'EMPTY') throw new ServiceError(409, `${month}월 ${grade}학년은 편성된 감독이 없습니다.`);
+  if (status === 'CLOSED') throw new ServiceError(409, `${month}월 ${grade}학년은 마감되어 초기화할 수 없습니다.`);
+
+  const { start, end } = monthBounds(year, month);
+  const assignments = await prisma.assignment.findMany({
+    where: { grade, date: { gte: start, lte: end } },
+    select: { id: true, teacherId: true },
+  });
+  const ids = assignments.map((a) => a.id);
+  const teacherIds = [...new Set(assignments.map((a) => a.teacherId))].filter((id) => id !== actorId);
+
+  await prisma.$transaction(async (tx) => {
+    if (ids.length > 0) {
+      await tx.assignmentHistory.deleteMany({ where: { assignmentId: { in: ids } } });
+      await tx.notification.updateMany({ where: { assignmentId: { in: ids } }, data: { assignmentId: null } });
+      await tx.assignment.deleteMany({ where: { id: { in: ids } } });
+    }
+    await tx.monthPlan.update({
+      where: { year_month_grade: { year, month, grade } },
+      data: { status: 'EMPTY', confirmedAt: null, confirmedById: null },
+    });
+    if (status === 'CONFIRMED' && teacherIds.length > 0) {
+      await tx.notification.createMany({
+        data: teacherIds.map((teacherId) => ({
+          teacherId,
+          type: 'MONTH_RESET',
+          message: `${year}년 ${month}월 ${grade}학년 감독 편성이 초기화되었습니다. 다시 편성·확정되면 알려드립니다.`,
+        })),
+      });
+    }
+  });
+
+  await recordAudit(actorId, 'RESET', { year, month, grade, previousStatus: status, removed: ids.length });
+  return { year, month, grade, status: 'EMPTY' as const, removedCount: ids.length };
+}
+
 /** 마감 해제 (F8). ADMIN 전용이며 본인 PIN을 다시 확인한다. CONFIRMED로 되돌린다. */
 export async function reopenMonthPlan(year: number, month: number, grade: Grade, actorId: number, pin: string) {
   const actor = await prisma.teacher.findUniqueOrThrow({ where: { id: actorId } });

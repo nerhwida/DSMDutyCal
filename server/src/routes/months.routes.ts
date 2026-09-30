@@ -7,6 +7,7 @@ import { requireAdmin, requireAuth, requireGradeScope } from '../permissions/mid
 import {
   closeMonthPlan,
   confirmMonthPlan,
+  resetMonthPlan,
   generateMonthPlan,
   getMonthView,
   regenerateMonthPlan,
@@ -105,6 +106,17 @@ monthsRouter.post(
     const parsed = z.object({ pin: z.string().min(4).max(6) }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: '마감 해제를 위해 PIN을 입력해주세요.' });
     res.json(await reopenMonthPlan(year, month, Number(req.params.grade) as Grade, req.user!.id, parsed.data.pin));
+  }),
+);
+
+/** POST /api/months/:year/:month/grades/:grade/reset — 감독 초기화: 해당 학년 배정 전체 해제 (ADMIN, 해당 학년부장). */
+monthsRouter.post(
+  '/:year/:month/grades/:grade/reset',
+  validateGradeParams,
+  requireGradeScope((req) => Number(req.params.grade)),
+  handle(async (req, res) => {
+    const { year, month } = parseYearMonth(req).data!;
+    res.json(await resetMonthPlan(year, month, Number(req.params.grade) as Grade, req.user!.id));
   }),
 );
 

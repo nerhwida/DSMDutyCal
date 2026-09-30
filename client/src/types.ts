@@ -170,7 +170,7 @@ export interface TeacherAssignment {
   status: MonthPlanStatus;
 }
 
-export type NotificationType = 'ASSIGNED_BY_CHANGE' | 'REMOVED_BY_CHANGE' | 'SWAPPED' | 'MONTH_CONFIRMED';
+export type NotificationType = 'ASSIGNED_BY_CHANGE' | 'REMOVED_BY_CHANGE' | 'SWAPPED' | 'MONTH_CONFIRMED' | 'MONTH_RESET';
 
 export interface AppNotification {
   id: number;
