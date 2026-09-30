@@ -143,6 +143,7 @@ $env:NODE_OPTIONS = "--use-system-ca"
 - 배포 피드(`/api/public/duty`)의 형식이 바뀌었다. 날마다 `specialDays: [{grade, type, title}]`(있을 때만)를
   준다. `type`은 전 학년 제외면 `SPECIAL`, 일부만 제외면 `OPERATING`이며 제외 학년의 `duty`는 null이다.
   (이전 `specialDay` 단일 객체는 없어졌다.)
+  방과후 운영일이면 `afterSchoolGrades: [..]`(자습 감독 학년)도 주고, 나머지 학년 `duty`는 null이다.
 
 ### 일정 관리 권한과 방과후 운영일 (2026-09-30)
 - 특별 일정과 방과후 운영일은 **ADMIN + 학년부장(모든 학년)** 이 관리한다 (`requireScheduleManager` =
@@ -151,11 +152,15 @@ $env:NODE_OPTIONS = "--use-system-ca"
   (`/:id`보다 먼저 등록해야 한다). 등록과 수정은 `saveSpecialDays()`를 함께 쓴다. 이 함수가 충돌 경고, 마감 월
   차단, 기존 행 교체를 한 트랜잭션으로 처리한다.
 - **방과후 운영일**(`AfterSchoolDay`, **날짜 × 학년**, 마이그레이션 `after_school_day_per_grade`에서 기존 행을 3개 학년으로 복제)
-  - 학년 = 방과후 시간에 자습하는 학년. 그 학년 감독은 그날 방과후 수업이 없는 교사가 맡는다 (오너 설명).
+  - 학년 = 방과후 시간에 자습하는 학년 (오너 설명). **그날은 지정한 학년만 편성**하고, 지정하지 않은 학년은 특별 일정처럼
+    편성 제외다. 지정한 학년 감독은 방과후 수업이 없는 교사가 맡는다.
+  - 편성 제외 계산은 `gradeExclusions(specialDays, afterSchoolDays)`(`scheduler/operatingDays.ts`)로 한곳에서 한다. 엔진은 입력의
+    두 목록으로 직접 계산하고, 서비스는 `gradeExclusionsBetween()`을 쓴다(`getMonthView`, `assertFillableCell`). 배포 피드는
+    `afterSchoolGrades`를 내보내고 나머지 학년 duty를 null로 둔다. 운영일 판단을 새로 추가하는 곳도 이 함수를 써야 한다.
   - 교사의 `AFTER_SCHOOL` 요일 제외는 `ScheduleContext.afterSchoolDay`가 true인 (날짜, 학년)에만 적용된다. `OTHER`는 항상 적용된다.
   - 엔진 입력 `afterSchoolDays`는 `{ date, grade }[]`, API·월 조회 응답은 날짜별 `{ date, grades }`이다.
-  - 등록(`POST`)·날짜별 지정(`PUT /:date`)은 `applyCells()`를 거친다. 새로 추가되는 (날짜, 학년)에 그 요일이 방과후 요일인
-    교사가 배정돼 있으면 409 `{ warning, conflictingAssignments }` → `confirmRemoveAssignments`면 `removeAssignmentsTx()`로
+  - 등록(`POST`)·날짜별 지정(`PUT /:date`)은 `applyCells()`를 거친다. 바뀌는 날짜의 저장 후 지정 학년 기준으로 맞지 않는 배정
+    (지정 안 한 학년 배정, 지정 학년의 방과후 요일 교사 배정)이 있으면 409 `{ warning, conflictingAssignments }` → `confirmRemoveAssignments`면 `removeAssignmentsTx()`로
     배정을 취소한다. 마감 월이면 확인해도 409. 삭제(`DELETE`)는 배정을 건드리지 않는다.
   - 따라서 **운영일이 하나도 없으면 방과후 교사도 모든 날 배정된다.** 운영 전에 운영일을 등록해야 한다.
   - `ScheduleContext`를 만드는 곳은 모두 운영일 여부를 넣어야 한다: 엔진, `assignmentService.evaluateTeachers`,
