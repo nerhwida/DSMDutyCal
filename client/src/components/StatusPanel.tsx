@@ -1,4 +1,4 @@
-import { GROUP_LABEL, type Grade, type MonthStats } from '../types';
+import type { Grade, MonthStats } from '../types';
 
 interface StatusPanelProps {
   stats: MonthStats | null;
@@ -34,7 +34,6 @@ export function StatusPanel({ stats, gradeFilter, myId }: StatusPanelProps) {
   const sections = [1, 2, 3, 0]
     .map((g) => ({ grade: g, rows: sorted.filter((r) => sectionOf(r) === g) }))
     .filter((s) => s.rows.length > 0);
-  const fairness = stats.fairness.filter((f) => !gradeFilter || f.grade === gradeFilter);
   const columns = gradeFilter ? 5 : 8;
 
   return (
@@ -106,30 +105,6 @@ export function StatusPanel({ stats, gradeFilter, myId }: StatusPanelProps) {
             )}
           </table>
         </div>
-        <p className="border-t border-slate-100 px-3 py-1 text-[11px] text-slate-400">
-          {gradeFilter
-            ? `${gradeFilter}학년 감독만 집계 · 총 누계 적은 순 · 이름순`
-            : '학년별 · 총 누계 적은 순 · 이름순 (여러 학년이면 가장 낮은 학년에 표시)'}{' '}
-          · 누계 = 초기 누계 + 확정·마감된 배정 ({stats.month}월 포함)
-        </p>
-      </div>
-
-      <div className="rounded border border-slate-200 bg-white">
-        <h3 className="border-b border-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">공정성 (누계 편차)</h3>
-        <ul className="px-3 py-2 text-xs">
-          {fairness.map((f) => (
-            <li key={`${f.grade}-${f.group}`} className={`flex justify-between py-0.5 ${f.warning ? 'text-red-600' : 'text-slate-600'}`}>
-              <span>
-                {f.grade}학년 {GROUP_LABEL[f.group]}
-              </span>
-              <span>
-                최대 {f.max} / 최소 {f.min} / 편차 {f.deviation}
-                {f.warning && ' ⚠'}
-              </span>
-            </li>
-          ))}
-          {fairness.length === 0 && <li className="text-slate-400">감독 가능 교사가 등록되지 않았습니다.</li>}
-        </ul>
       </div>
     </aside>
   );
