@@ -353,15 +353,31 @@ export async function changeAssignment(
     });
   }
 
-  const note = [input.force && e.warnings.length > 0 ? '[강제 배정]' : null, input.note].filter(Boolean).join(' ');
+  const note = [
+    user.isAdmin ? '[관리자 지정]' : null,
+    input.force && e.warnings.length > 0 ? '[강제 배정]' : null,
+    input.note,
+  ]
+    .filter(Boolean)
+    .join(' ');
   return prisma.$transaction(async (tx) => {
     const updated = await tx.assignment.update({
       where: { id: a.id },
-      data: {
-        teacherId: input.teacherId,
-        isModified: input.teacherId !== a.originalTeacherId, // 최초 교사로 되돌리면 false (이력은 유지)
-        modifiedAt: new Date(),
-      },
+      data: user.isAdmin
+        ? {
+            // 관리자가 직접 지정한 교사는 교체가 아니라 초기 배정으로 본다 (변경 표시 없음, 이력은 유지).
+            // 변경 표시가 없으면 부분 재편성이 덮어쓰므로 미배정 칸 지정처럼 고정한다.
+            teacherId: input.teacherId,
+            originalTeacherId: input.teacherId,
+            isModified: false,
+            isLocked: true,
+            modifiedAt: new Date(),
+          }
+        : {
+            teacherId: input.teacherId,
+            isModified: input.teacherId !== a.originalTeacherId, // 최초 교사로 되돌리면 false (이력은 유지)
+            modifiedAt: new Date(),
+          },
     });
     await tx.assignmentHistory.create({
       data: {

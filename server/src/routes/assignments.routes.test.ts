@@ -321,6 +321,22 @@ describe('관리 목적 감독 변경 (F6)', () => {
     expect(await prisma.notification.count({ where: { teacherId: a.id, type: 'REMOVED_BY_CHANGE' } })).toBe(1);
   });
 
+  it('관리자가 지정하면 교체가 아니라 초기 배정이 된다 (변경 표시 없음, 고정, 이력 유지)', async () => {
+    const a = await newTeacher('관리자지정A', [1]);
+    const b = await newTeacher('관리자지정B', [1]);
+    const x = await cell('2031-07-21', 1, a.id);
+    const admin = await loginFixture(process.env.ADMIN_NAME!, process.env.ADMIN_INITIAL_PIN!);
+
+    const res = await admin.put(`/api/assignments/${x.id}`).send({ teacherId: b.id });
+    expect(res.status).toBe(200);
+    const after = await reload(x.id);
+    expect(after).toMatchObject({ teacherId: b.id, originalTeacherId: b.id, isModified: false, isLocked: true });
+
+    const history = await prisma.assignmentHistory.findMany({ where: { assignmentId: x.id } });
+    expect(history).toHaveLength(1);
+    expect(history[0]).toMatchObject({ fromTeacherId: a.id, toTeacherId: b.id, changedByRole: 'ADMIN', note: '[관리자 지정]' });
+  });
+
   it('불가 교사는 강제 배정 체크 시에만 저장, 같은 날 다른 학년 감독 중이면 강제로도 불가', async () => {
     const date = '2031-07-02';
     const a = await newTeacher('강제A', [1]);
