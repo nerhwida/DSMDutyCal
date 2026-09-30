@@ -150,11 +150,15 @@ $env:NODE_OPTIONS = "--use-system-ca"
 - 특별 일정 수정은 화면의 "일정 1건"(같은 날짜·유형·일정명 묶음) 단위로 한다: `PUT /api/special-days/group`
   (`/:id`보다 먼저 등록해야 한다). 등록과 수정은 `saveSpecialDays()`를 함께 쓴다. 이 함수가 충돌 경고, 마감 월
   차단, 기존 행 교체를 한 트랜잭션으로 처리한다.
-- **방과후 운영일**(`AfterSchoolDay`, 학교 전체)
-  - 교사의 `AFTER_SCHOOL` 요일 제외는 `ScheduleContext.afterSchoolDay`가 true인 날에만 적용된다. `OTHER`는 항상 적용된다.
+- **방과후 운영일**(`AfterSchoolDay`, **날짜 × 학년**, 마이그레이션 `after_school_day_per_grade`에서 기존 행을 3개 학년으로 복제)
+  - 학년 = 방과후 시간에 자습하는 학년. 그 학년 감독은 그날 방과후 수업이 없는 교사가 맡는다 (오너 설명).
+  - 교사의 `AFTER_SCHOOL` 요일 제외는 `ScheduleContext.afterSchoolDay`가 true인 (날짜, 학년)에만 적용된다. `OTHER`는 항상 적용된다.
+  - 엔진 입력 `afterSchoolDays`는 `{ date, grade }[]`, API·월 조회 응답은 날짜별 `{ date, grades }`이다.
   - 따라서 **운영일이 하나도 없으면 방과후 교사도 모든 날 배정된다.** 운영 전에 운영일을 등록해야 한다.
   - `ScheduleContext`를 만드는 곳은 모두 운영일 여부를 넣어야 한다: 엔진, `assignmentService.evaluateTeachers`,
     `getMonthView`의 미배정 사유. 필수 필드라 tsc가 알려 준다.
+- **의무귀가**는 일정 관리의 별도 영역(`MandatoryHomeSection`)에서 등록한다. 저장은 특별 일정 `MANDATORY_HOME` 그대로이고,
+  `POST /api/special-days`에 `weekdaysOnly: true`를 보내 기간 안의 평일만 만든다. 특별 일정 목록·유형 선택에서는 빠진다.
 
 ### 순번 모델 (중요하고 드러나지 않는 설계 결정)
 REQUIREMENTS.md의 데이터 모델(§4)에는 `Teacher.sortOrder` 하나만 있다. 그런데 §5(F2)는
