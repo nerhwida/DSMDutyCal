@@ -167,6 +167,8 @@ export function SpecialDaysPage() {
       <h2 className="text-base font-semibold text-slate-800">일정 관리</h2>
       {error && <p className="text-sm text-red-600">{error}</p>}
 
+      <AfterSchoolSection canManage={canManage} />
+
       {canManage && (
         <div className="space-y-3 rounded border border-slate-200 bg-white p-4">
           <h3 className="text-sm font-semibold text-slate-700">특별 일정 등록</h3>
@@ -372,8 +374,6 @@ export function SpecialDaysPage() {
           </tbody>
         </table>
       </div>
-
-      <AfterSchoolSection canManage={canManage} />
     </div>
   );
 }
