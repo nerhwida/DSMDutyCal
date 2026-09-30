@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import { recordAudit } from '../lib/audit.js';
 import { dateLabel, weekdayOf } from '../lib/dateUtils.js';
 import { rotationGroupForWeekday, type Grade, type NotificationType, type Role } from '../lib/enums.js';
 import type { AuthenticatedUser } from '../auth/authService.js';
@@ -406,6 +407,60 @@ export async function changeAssignment(
     }
     return updated;
   });
+}
+
+// ---------------------------------------------------------------------------
+// 감독 취소 — ADMIN, 해당 학년부장
+// ---------------------------------------------------------------------------
+
+type RemovableAssignment = { id: number; date: string; grade: number; teacherId: number };
+
+/**
+ * 배정 삭제 공통 처리 (감독 취소, 방과후 운영일 등록). 셀은 미배정이 되고, 배정의 변경 이력도 함께 지워진다
+ * (AssignmentHistory는 배정에 매여 있다). 확정 월의 배정이면 해제된 교사에게 셀 목록을 담아 한 번 알린다.
+ * 마감 월 검사는 호출하는 쪽에서 한다.
+ */
+export async function removeAssignmentsTx(
+  tx: Prisma.TransactionClient,
+  rows: RemovableAssignment[],
+  actor: { id: number; name: string },
+  reason: string,
+) {
+  if (rows.length === 0) return;
+  const ids = rows.map((r) => r.id);
+  await tx.assignmentHistory.deleteMany({ where: { assignmentId: { in: ids } } });
+  await tx.notification.updateMany({ where: { assignmentId: { in: ids } }, data: { assignmentId: null } });
+  await tx.assignment.deleteMany({ where: { id: { in: ids } } });
+
+  const confirmed = await tx.monthPlan.findMany({ where: { status: 'CONFIRMED' } });
+  const confirmedKeys = new Set(confirmed.map((p) => `${p.year}-${p.month}-${p.grade}`));
+  const cellsByTeacher = new Map<number, string[]>();
+  for (const r of rows) {
+    const [y, m] = r.date.split('-').map(Number);
+    if (!confirmedKeys.has(`${y}-${m}-${r.grade}`) || r.teacherId === actor.id) continue;
+    cellsByTeacher.set(r.teacherId, [...(cellsByTeacher.get(r.teacherId) ?? []), cellLabel(r)]);
+  }
+  await notify(
+    tx,
+    [...cellsByTeacher].map(([teacherId, cells]) => ({
+      teacherId,
+      type: 'REMOVED_BY_CHANGE' as const,
+      message: `${actor.name} 선생님이 ${cells.join(', ')} 감독 배정을 취소했습니다. (${reason})`,
+    })),
+  );
+}
+
+/** DELETE /api/assignments/:id — 감독 취소. 셀을 미배정으로 되돌린다 (ADMIN, 해당 학년부장, 마감 월 불가). */
+export async function cancelAssignment(assignmentId: number, user: AuthenticatedUser) {
+  const a = await loadAssignment(assignmentId);
+  assertGradeScope(user, a.grade);
+  await assertNotClosed(a);
+  await prisma.$transaction((tx) => removeAssignmentsTx(tx, [a], user, '감독 취소'));
+  await recordAudit(user.id, 'CANCEL_ASSIGNMENT', {
+    reason: '감독 취소',
+    cells: [{ date: a.date, grade: a.grade, teacherId: a.teacherId, teacherName: a.teacher.name }],
+  });
+  return { ok: true, date: a.date, grade: a.grade };
 }
 
 // ---------------------------------------------------------------------------

@@ -35,6 +35,7 @@ export const AUDIT_ACTIONS = [
   'CLOSE',
   'REOPEN',
   'RESET',
+  'CANCEL_ASSIGNMENT',
   'SET_GRADE_HEAD',
   'RESET_PIN',
   'CREATE_TEACHER',

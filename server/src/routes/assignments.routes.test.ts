@@ -360,12 +360,36 @@ describe('관리 목적 감독 변경 (F6)', () => {
     expect(doubled.status).toBe(409);
   });
 
+  it('감독 취소: 셀이 미배정이 되고 이력은 지워지며, 확정 월이면 교사에게 알린다', async () => {
+    const a = await newTeacher('취소A', [1]);
+    const b = await newTeacher('취소B', [1]);
+    const x = await cell('2031-07-22', 1, a.id);
+    const head1 = await loginFixture('1학년부장', '1111');
+    await head1.put(`/api/assignments/${x.id}`).send({ teacherId: b.id }); // 이력 1건
+
+    // 담당 학년이 아니거나 일반 교사면 403
+    expect((await (await loginFixture('2학년부장', '2222')).delete(`/api/assignments/${x.id}`)).status).toBe(403);
+    expect((await a.agent.delete(`/api/assignments/${x.id}`)).status).toBe(403);
+
+    const res = await head1.delete(`/api/assignments/${x.id}`);
+    expect(res.status).toBe(200);
+    expect(await prisma.assignment.findUnique({ where: { id: x.id } })).toBeNull();
+    expect(await prisma.assignmentHistory.count({ where: { assignmentId: x.id } })).toBe(0);
+    const removed = await prisma.notification.findFirstOrThrow({ where: { teacherId: b.id, type: 'REMOVED_BY_CHANGE', assignmentId: null } });
+    expect(removed.message).toContain('감독 배정을 취소했습니다');
+
+    const view = await head1.get('/api/months/2031/7');
+    expect(view.body.unassigned.some((u: { date: string; grade: number }) => u.date === '2031-07-22' && u.grade === 1)).toBe(true);
+    expect((await head1.delete(`/api/assignments/${x.id}`)).status).toBe(404);
+  });
+
   it('마감 월은 관리 변경 불가', async () => {
     const a = await newTeacher('마감변경A', [1]);
     const b = await newTeacher('마감변경B', [1]);
     const head1 = await loginFixture('1학년부장', '1111');
     const closed = await cell('2031-08-01', 1, a.id, 'CLOSED');
     expect((await head1.put(`/api/assignments/${closed.id}`).send({ teacherId: b.id })).status).toBe(409);
+    expect((await head1.delete(`/api/assignments/${closed.id}`)).status).toBe(409);
   });
 });
 

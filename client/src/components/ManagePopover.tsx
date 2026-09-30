@@ -17,6 +17,7 @@ export function ManagePopover({ assignmentId, onDone, onCancel }: ManagePopoverP
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
 
   useEffect(() => {
     api
@@ -47,6 +48,21 @@ export function ManagePopover({ assignmentId, onDone, onCancel }: ManagePopoverP
     } catch (err) {
       const warnings = err instanceof ApiError ? (err.body as { warnings?: string[] })?.warnings : undefined;
       setError([err instanceof Error ? err.message : '변경에 실패했습니다.', ...(warnings ?? [])].join('\n'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** 감독 취소: 셀을 미배정으로 되돌린다. */
+  async function cancelDuty() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.delete(`/api/assignments/${assignmentId}`);
+      onDone();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '감독 취소에 실패했습니다.');
+      setConfirmCancel(false);
     } finally {
       setBusy(false);
     }
@@ -112,10 +128,34 @@ export function ManagePopover({ assignmentId, onDone, onCancel }: ManagePopoverP
       {closed && <p className="text-xs text-slate-500">마감된 월은 변경할 수 없습니다.</p>}
       {error && <p className="whitespace-pre-line text-xs text-red-600">{error}</p>}
 
-      <div className="flex items-center justify-end">
+      {confirmCancel && (
+        <div className="rounded border border-red-300 bg-red-50 p-2 text-xs text-red-800">
+          <p>
+            {assignment.teacherName} 선생님의 감독 배정을 취소하고 이 칸을 미배정으로 둘까요? 이 칸의 변경 이력도 함께 삭제됩니다.
+            {assignment.status === 'CONFIRMED' && ' 확정된 월이므로 해당 교사에게 알림이 발송됩니다.'}
+          </p>
+          <div className="mt-1.5 flex gap-2">
+            <button onClick={cancelDuty} disabled={busy} className="rounded bg-red-600 px-2 py-1 text-white disabled:opacity-40">
+              감독 취소 확인
+            </button>
+            <button onClick={() => setConfirmCancel(false)} className="rounded border border-slate-300 bg-white px-2 py-1 text-slate-600">
+              아니오
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => setConfirmCancel(true)}
+          disabled={busy || closed || confirmCancel}
+          className="rounded border border-red-400 px-3 py-1.5 text-red-700 hover:bg-red-50 disabled:opacity-40"
+        >
+          감독 취소
+        </button>
         <div className="flex gap-2">
           <button onClick={onCancel} className="rounded border border-slate-300 px-3 py-1.5 text-slate-600">
-            취소
+            닫기
           </button>
           <button
             onClick={save}

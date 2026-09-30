@@ -4,6 +4,7 @@ import { handle } from '../lib/http.js';
 import { dateStringSchema, gradeSchema } from '../lib/validation.js';
 import { requireAuth, requireOwnAssignment } from '../permissions/middleware.js';
 import {
+  cancelAssignment,
   changeAssignment,
   fillAssignment,
   getCandidates,
@@ -86,6 +87,14 @@ assignmentsRouter.put(
     const parsed = changeSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: '입력값이 올바르지 않습니다.' });
     res.json(await changeAssignment(Number(req.params.id), parsed.data, req.user!));
+  }),
+);
+
+/** DELETE /api/assignments/:id — 감독 취소: 셀을 미배정으로 되돌린다 (ADMIN, 해당 학년부장). 학년 권한은 서비스에서 검사. */
+assignmentsRouter.delete(
+  '/:id',
+  handle(async (req, res) => {
+    res.json(await cancelAssignment(Number(req.params.id), req.user!));
   }),
 );
 
