@@ -232,11 +232,15 @@ REQUIREMENTS.md의 데이터 모델(§4)에는 `Teacher.sortOrder` 하나만 있
     기준으로 센다.
 - **미배정 칸 직접 지정**(`fillAssignment`, `POST /api/assignments`)은 F6 관리 변경과 같은 규칙을 따른다.
   - 후보 목록은 `GET /api/assignments/candidates?date=&grade=`로 받는다.
-  - 조건: 담당 학년 권한, DRAFT/CONFIRMED만, 운영일이어야 하고 셀이 비어 있어야 한다.
+  - 조건: 담당 학년 권한, CLOSED가 아닌 월(**EMPTY도 가능** — 첫 지정 시 MonthPlan을 DRAFT로 만들고 메모 `[수동 편성]`),
+    운영일이어야 하고 셀이 비어 있어야 한다. 달력은 미편성 월의 `—` 칸도 담당자에게 클릭 가능하게 보여 준다.
   - 차단 규칙은 강제로 풀 수 없고, 경고는 `force`가 필요하다.
   - `originalTeacherId` = 지정한 교사이므로 변경 셀로 표시되지 않는다.
-  - **고정(🔒) 기능은 없다** (오너 결정으로 제거, 마이그레이션 `remove_assignment_lock`). 직접 지정·ADMIN 변경
-    셀은 `isModified`가 아니므로 이후 자동 편성·부분 재편성이 덮어쓸 수 있다.
+  - **고정(🔒) 기능은 없다** (오너 결정으로 제거, 마이그레이션 `remove_assignment_lock`). 대신 `loadSchedulerInput`이
+    **변경 이력(AssignmentHistory)이 있는 셀을 `isModified: true`로 엔진에 넘겨** 자동 편성·부분 재편성에서 유지한다
+    (직접 지정·ADMIN 변경 셀은 ↻ 표시가 없어도 보호). 부분 재편성의 `includeModified`는 이 셀들도 다시 편성한다.
+  - 후보 목록 응답의 각 교사에는 담당 학년 `grades`가 있다. 클라이언트 `CandidateList`가 감독 칸의 학년 → 다른 학년 →
+    미지정 순으로 묶고 이름(ko) 순으로 정렬한다 (관리 변경·빈 칸 지정 팝오버 공통).
   - 이력은 `fromTeacherId = null`로 남긴다.
     - `AssignmentHistory.fromTeacherId`는 마이그레이션 `history_nullable_from`부터 nullable이다.
     - UI는 null을 "미배정"으로 표시하고, '내 감독' 이력에서는 종류 `ASSIGNED`로 보여 준다.
