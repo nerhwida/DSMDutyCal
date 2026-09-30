@@ -40,6 +40,9 @@
 | 변경 | **로그인은 이름 직접 입력 + PIN** (관리자 포함). 로그인 화면에 교사 목록을 노출하지 않으며 `GET /api/auth/teachers`는 삭제. 동명이인은 PIN으로 구분한다. 기존: 이름 선택. | 가정 9, §7 |
 | 변경 | 교사 관리 목록은 **관리자 먼저, 이후 이름 오름차순**으로 표시. | F2 |
 | 변경 | 일정 관리 화면에서 **방과후 운영일을 특별 일정 등록 위**에 배치. | F3 |
+| 추가 | **감독 취소** (학년부장·ADMIN): 달력의 관리 팝오버에서 배정을 취소해 미배정 칸으로 되돌린다. 마감 월 불가, 확정 월이면 해당 교사에게 알림. 셀의 변경 이력은 함께 삭제되고 감사 로그에 남는다. | F6, §7 |
+| 추가 | 방과후 운영일 지정 시 **이미 편성된 방과후 요일 교사의 배정 취소** (경고 후 확인). 마감 월에 걸리면 거부. | F3 |
+| 추가 | 방과후 운영일 **달력에서 날짜를 눌러 자습 감독 학년 지정**, 기간 등록 시 **요일 선택**. | F3, §7 |
 | 변경 | **방과후 운영일을 날짜 × 학년 단위로** 관리. 등록 시 적용 학년(방과후 시간에 자습하는 학년)을 선택하고, 그 학년 감독에서만 방과후 요일 교사를 제외한다. 기존 운영일은 전 학년 적용으로 이전. | 가정 2, §4 AfterSchoolDay, F3, 6.2, §7 |
 | 변경 | **의무귀가는 별도 영역에서 등록** (기간 안의 평일 + 감독 제외 학년). 저장은 특별 일정 `MANDATORY_HOME` 그대로이며, 특별 일정 등록의 유형 목록에서는 빠진다. | F3, §7 |
 | 변경 | 달력 글씨 크기 추가 확대 (화면만). | F5 |
@@ -334,6 +337,9 @@ SQLite는 Prisma 네이티브 `enum`을 지원하지 않으므로 enum 성격의
 - **방과후 운영일** *(추가)*: 방과후 수업이 열리는 기간을 등록(기간 안의 평일)하고, 시험 기간 등은 기간 단위로 제외한다.
   **적용 학년**(방과후 시간에 자습하는 학년, 기본 전 학년)을 선택한다 *(개정)*. 교사의 방과후 요일은 이 운영일의 적용 학년 감독에서만
   제외로 적용되고, 적용하지 않은 학년에는 방과후 교사도 배정될 수 있다. 달력에는 운영일에 `방과후`(일부 학년이면 `방과후 2` 등) 표시.
+  - 기간 등록 시 요일(월~금)을 고를 수 있다. 일정 관리의 방과후 달력에서 날짜를 누르면 그날의 자습 감독 학년을 바로 지정·해제한다.
+  - 새로 적용되는 (날짜, 학년)에 그 요일이 방과후 요일인 교사가 이미 배정돼 있으면 목록으로 경고하고, 확인하면 그 배정을 취소(미배정)한 뒤 저장한다.
+    확정 월이면 해당 교사에게 알림. 마감 월 배정이 걸리면 저장을 거부한다.
 - 기간 등록 지원 (예: 시험 10/20~10/23 → 날짜별로 저장).
 - **감독 제외 학년 선택** (기본: 전 학년). 체크한 학년만 해당 날짜에 편성하지 않는다.
   - 예: 2학년 수학여행 → 2학년만 체크 → 1·3학년은 그날도 정상 편성
@@ -395,6 +401,7 @@ SQLite는 Prisma 네이티브 `enum`을 지원하지 않으므로 enum 성격의
   - 메모(선택). 변경자는 로그인 정보로 자동 기록
   - `[취소] [변경]`
 - 변경 시 AssignmentHistory 기록. 확정 월이면 새 교사·기존 교사에게 알림.
+- **감독 취소** *(추가)*: 팝오버의 `[감독 취소]`로 배정을 지워 미배정 칸으로 되돌린다 (확인 단계 있음). 마감 월 불가. 확정 월이면 해당 교사에게 알림. 셀의 변경 이력은 배정과 함께 지워지고 감사 로그(`CANCEL_ASSIGNMENT`)에 남는다. 빈 칸은 미배정 칸 직접 지정이나 부분 재편성으로 다시 채운다.
 - 최초 교사로 다시 되돌리면 `isModified=false`로 복귀 (이력은 유지).
 - **ADMIN이 변경하면 교체가 아니라 초기 배정**으로 본다 *(개정)*: 지정한 교사가 최초 교사가 되어 노란 표시가 없다. 이력(`[관리자 지정]`)과 확정 월 알림은 그대로다. 학년부장의 변경은 기존대로 노란 표시.
 - 강제 배정(학년부장·ADMIN 전용): 불가 교사도 "강제 배정" 체크 시 선택 가능 (경고 표시 후 저장, 이력에 기록). 단, **같은 날 다른 학년을 감독 중인 교사는 강제로도 배정할 수 없다** (가정 3). *(구체화)*
@@ -577,8 +584,9 @@ interface HardRule {       // 후보 제외 규칙
 | DELETE | /api/special-days?ids= | 특별 일정 여러 행 삭제 (화면의 일정 1건) | ADMIN, 학년부장 |
 | POST | /api/special-days/seed-holidays | 연도별 공휴일 시드 (전 학년) | ADMIN, 학년부장 |
 | GET | /api/after-school-days?from=&to= | 방과후 운영일 목록 `[{date, grades}]` | 로그인 |
-| POST | /api/after-school-days | 운영 기간 등록 `{startDate, endDate?, grades?}` (평일만, 학년 생략 시 전 학년) | ADMIN, 학년부장 |
-| DELETE | /api/after-school-days?from=&to=&grades= | 기간 안의 운영일 제외 (학년 생략 시 전 학년) | ADMIN, 학년부장 |
+| POST | /api/after-school-days | 운영 기간 등록 `{startDate, endDate?, weekdays?, grades?, confirmRemoveAssignments?}` (평일만, 학년 생략 시 전 학년) | ADMIN, 학년부장 |
+| PUT | /api/after-school-days/:date | 한 날짜의 자습 감독 학년 지정 `{grades, confirmRemoveAssignments?}` (빈 배열이면 운영일 해제) | ADMIN, 학년부장 |
+| DELETE | /api/after-school-days?from=&to=&grades=&weekdays= | 기간 안의 운영일 제외 (학년·요일 생략 시 전체) | ADMIN, 학년부장 |
 | GET | /api/months/:year/:month | 달력 데이터 (DRAFT는 권한자만 포함) | 로그인 |
 | POST | /api/months/:year/:month/grades/:grade/generate | 자동 편성 미리보기 | ADMIN, 해당 학년부장 |
 | POST | /api/months/:year/:month/grades/:grade/confirm | 확정 | ADMIN, 해당 학년부장 |
@@ -588,6 +596,7 @@ interface HardRule {       // 후보 제외 규칙
 | POST | /api/months/:year/:month/grades/:grade/reset | 감독 초기화 (해당 학년 배정 전체 해제 → EMPTY) | ADMIN, 해당 학년부장 |
 | GET | /api/assignments/:id/candidates | 변경 가능 교사 + 불가 사유 | 수정 권한자, 본인 |
 | PUT | /api/assignments/:id | 관리 목적 감독 변경 `{teacherId, note?, force?}` | ADMIN, 해당 학년부장 |
+| DELETE | /api/assignments/:id | 감독 취소 (셀을 미배정으로) | ADMIN, 해당 학년부장 |
 | GET | /api/assignments/candidates?date=&grade= | 미배정 칸 지정용 교사 목록 | ADMIN, 해당 학년부장 |
 | POST | /api/assignments | 미배정 칸 직접 지정 `{date, grade, teacherId, force?, note?}` | ADMIN, 해당 학년부장 |
 | GET | /api/assignments/:id/transfer-preview?toTeacherId= | 넘기기 경고 사항 조회 | 본인 |

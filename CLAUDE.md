@@ -154,6 +154,9 @@ $env:NODE_OPTIONS = "--use-system-ca"
   - 학년 = 방과후 시간에 자습하는 학년. 그 학년 감독은 그날 방과후 수업이 없는 교사가 맡는다 (오너 설명).
   - 교사의 `AFTER_SCHOOL` 요일 제외는 `ScheduleContext.afterSchoolDay`가 true인 (날짜, 학년)에만 적용된다. `OTHER`는 항상 적용된다.
   - 엔진 입력 `afterSchoolDays`는 `{ date, grade }[]`, API·월 조회 응답은 날짜별 `{ date, grades }`이다.
+  - 등록(`POST`)·날짜별 지정(`PUT /:date`)은 `applyCells()`를 거친다. 새로 추가되는 (날짜, 학년)에 그 요일이 방과후 요일인
+    교사가 배정돼 있으면 409 `{ warning, conflictingAssignments }` → `confirmRemoveAssignments`면 `removeAssignmentsTx()`로
+    배정을 취소한다. 마감 월이면 확인해도 409. 삭제(`DELETE`)는 배정을 건드리지 않는다.
   - 따라서 **운영일이 하나도 없으면 방과후 교사도 모든 날 배정된다.** 운영 전에 운영일을 등록해야 한다.
   - `ScheduleContext`를 만드는 곳은 모두 운영일 여부를 넣어야 한다: 엔진, `assignmentService.evaluateTeachers`,
     `getMonthView`의 미배정 사유. 필수 필드라 tsc가 알려 준다.
@@ -233,6 +236,10 @@ REQUIREMENTS.md의 데이터 모델(§4)에는 `Teacher.sortOrder` 하나만 있
     - `AssignmentHistory.fromTeacherId`는 마이그레이션 `history_nullable_from`부터 nullable이다.
     - UI는 null을 "미배정"으로 표시하고, '내 감독' 이력에서는 종류 `ASSIGNED`로 보여 준다.
   - CONFIRMED 월이면 지정된 교사에게 알림을 보낸다 (F6 동작과 동일).
+- **감독 취소**(`cancelAssignment`, `DELETE /api/assignments/:id`): 학년 범위 권한, CLOSED 불가. 배정 삭제는
+  `removeAssignmentsTx()` 공통 함수로 한다: 이력 삭제(AssignmentHistory는 배정 FK가 필수라 남길 수 없음) → 알림의
+  assignmentId 해제 → 배정 삭제 → CONFIRMED 월이면 교사별로 모아 `REMOVED_BY_CHANGE` 알림. 대신 감사 로그
+  `CANCEL_ASSIGNMENT`에 셀·교사를 남긴다. 방과후 운영일 지정 시 배정 취소도 같은 함수를 쓴다.
 - `components/Popover.tsx`는 `ResizeObserver`로 크기가 바뀔 때마다 위치를 다시 잡는다. 팝오버 내용이
   비동기로 로드되기 때문에, 처음 한 번만 배치하면 아래쪽 주의 셀에서 동작 버튼이 화면 밖으로 밀렸다.
 
