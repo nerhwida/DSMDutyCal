@@ -177,7 +177,7 @@ REQUIREMENTS.md의 데이터 모델(§4)에는 `Teacher.sortOrder` 하나만 있
 - `weekdayOrder`/`fridayOrder`를 `Teacher`가 아니라 `TeacherGrade`에 직접 추가했다. 그래서
   (교사, 학년) 행마다 월~목 큐와 금요일 큐의 위치를 각각 가진다.
 - `PUT /api/grades/:grade/order`는 두 필드 중 하나를 한 번에 재정렬한다.
-- 스케줄러 엔진은 §6.3에 따라 동률 처리에 이 필드들을 읽는다.
+- 스케줄러 엔진은 §6.3에 따라 이 순서를 **가장 먼저** 본다 (순번 우선, 아래 참고).
 
 ### 스케줄러 엔진 (Phase 3)
 - `server/src/scheduler/`는 **순수** 모듈이다 (Prisma import 없음).
@@ -195,8 +195,11 @@ REQUIREMENTS.md의 데이터 모델(§4)에는 `Teacher.sortOrder` 하나만 있
     시작하고, 없으면 순번 맨 앞에서 시작한다. 포인터는 새로 편성해 선택할 때만 움직인다.
   - **누계** = InitialCount + 이전 CONFIRMED/CLOSED 배정 수(실제 `teacherId` 기준) + 이번 달 편성 중
     누적분(유지 셀 포함).
-  - **§6.3-3 "직전 운영일 감독자 후순위"**는 `options.avoidPreviousDay`이고 기본은 **꺼짐**이다.
-    누계 기준 바로 다음에 적용한다. 순번 기준 다음에 두면 아무 효과가 없기 때문이다.
+  - **선택 기준은 순번 우선이다** (오너 결정, 2026-09-30. 원래 명세는 누계 우선). `selection.ts`:
+    직전 운영일 옵션 → 포인터 다음 순번 거리 → 누계 → id. 순번이 전순서라 누계는 사실상 쓰이지 않는다.
+    자동 편성은 드래그로 정한 순서를 채우는 편의 기능이고, 누계·공정성 지표는 참고용 표시다.
+  - **"직전 운영일 감독자 후순위"**는 `options.avoidPreviousDay`이고 기본은 **꺼짐**이다.
+    순번 기준보다 앞에 적용한다. 순번 다음에 두면 아무 효과가 없기 때문이다.
   - **미배정 셀은 행으로 저장하지 않는다** (`Assignment.teacherId`는 non-null). "EMPTY가 아닌 월에서
     배정이 없는 운영일"로 계산하며, generate는 사유를 `warnings`로 돌려준다.
   - 엔진은 부분 재편성(`input.dates`)을 지원한다. `regenerate` API는 Phase 5에서 구현했다
