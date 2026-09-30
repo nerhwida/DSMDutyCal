@@ -280,6 +280,12 @@ REQUIREMENTS.md의 데이터 모델(§4)에는 `Teacher.sortOrder` 하나만 있
   - CONFIRMED/CLOSED만 세고 DRAFT는 절대 세지 않는다. 월 패널용 `/api/stats`가 볼 수 있는 사용자에게
     DRAFT를 보여 주는 것과 다르다.
   - 학기 프리셋은 클라이언트에 있다: 1학기 3–8월, 2학기 9–2월. 학년도는 3월에 시작한다.
+- **통계 제외 월** (`TeacherStatsExclusion`, 교사 × 월, 마이그레이션 `teacher_stats_exclusion`)
+  - 관리자·학년부장(`requireScheduleManager`)이 교사 관리 화면에서 등록한다 (`/api/teachers/:id/stats-exclusions`).
+  - `statsService.aggregate`가 기간 안의 제외 월을 `excludedMonths`로 돌려준다.
+    - 월 현황(`/api/stats`): 그 달 제외 교사는 행·공정성 풀에서 뺀다.
+    - 기간 통계: 모든 달이 제외면 행을 숨기고, 하나라도 제외면 공정성 풀에서 뺀다 (행에는 `excludedMonths`).
+  - **통계 표시 전용**이다. 감독 횟수·누계 계산과 스케줄러는 이 표를 보지 않는다. 교사 삭제 시 함께 지운다.
 - **인쇄 (F9)**
   - `@page { size: A4 landscape }`는 `index.css`에 있다.
   - 그리드 외 모든 요소는 `print:hidden`이고, 셀은 `print:min-h-[64px]`로 줄어든다.

@@ -40,6 +40,7 @@
 | 변경 | **로그인은 이름 직접 입력 + PIN** (관리자 포함). 로그인 화면에 교사 목록을 노출하지 않으며 `GET /api/auth/teachers`는 삭제. 동명이인은 PIN으로 구분한다. 기존: 이름 선택. | 가정 9, §7 |
 | 변경 | 교사 관리 목록은 **관리자 먼저, 이후 이름 오름차순**으로 표시. | F2 |
 | 변경 | 일정 관리 화면에서 **방과후 운영일을 특별 일정 등록 위**에 배치. | F3 |
+| 추가 | **교사별 통계 제외 월** (휴직·파견 등, 관리자·학년부장 관리). 제외한 달에는 현황·통계 목록에 표시하지 않고 공정성 지표에서 뺀다. 감독 횟수·편성 누계는 그대로. | §4 TeacherStatsExclusion, F2, F7, §7 |
 | 추가 | **미편성 월 수동 편성**: 편성 전 달력의 빈 칸도 클릭해 감독 교사를 지정한다. 첫 지정 시 그 월·학년은 미리보기(DRAFT)가 된다. | F5, F6 |
 | 변경 | 자동 편성·부분 재편성은 **직접 지정·변경한 셀(변경 이력이 있는 셀)을 유지**한다 (↻ 표시가 없어도). "다시 편성" 옵션을 켜면 다시 편성. | F4, 6.4 |
 | 변경 | 감독 변경·지정 팝오버의 교사 목록을 **학년별로 묶어 이름순** 정렬 (감독 칸의 학년 교사 먼저). | F6 |
@@ -185,6 +186,10 @@ SQLite는 Prisma 네이티브 `enum`을 지원하지 않으므로 enum 성격의
 
 ### TeacherUnavailableDate (감독 불가일)
 - `teacherId`, `date`, `reason (String, 출장/연수/개인 등)`
+
+### TeacherStatsExclusion (통계 제외 월) *(추가)*
+- `teacherId`, `year`, `month`, `UNIQUE(teacherId, year, month)` — 휴직·파견 등으로 그 달 통계에서 뺄 교사.
+- 교사 관리 화면에서 관리자·학년부장이 월 단위(기간 가능)로 등록·삭제한다.
 
 ### SpecialDay (특별 일정) *(개정)*
 - `date`, **`grade (1|2|3)`**, `type ('MANDATORY_HOME' | 'HOLIDAY' | 'VACATION' | 'SCHOOL_CLOSURE' | 'EXAM' | 'EVENT' | 'OTHER')`, `title`
@@ -421,6 +426,9 @@ SQLite는 Prisma 네이티브 `enum`을 지원하지 않으므로 enum 성격의
 - `CLOSED` 학년·월은 변경 불가 (마감 해제는 ADMIN만, PIN 재확인 후 가능).
 
 ### F7. 통계 / 누계
+- **통계 제외 월** *(추가)*: 교사별로 제외한 달에는 달력 현황 패널과 통계 목록에 그 교사를 표시하지 않고, 공정성 지표(편차)에서도 뺀다.
+  기간 통계는 기간의 모든 달이 제외면 목록에서 숨기고, 일부 달만 제외면 목록에 `제외 3·4월`처럼 표시하되 공정성 지표에서는 뺀다.
+  감독 횟수·누계와 자동 편성은 영향을 받지 않는다.
 - 교사 × 학년 표:
 
 | 교사 | 1학년 | 2학년 | 3학년 | 기간 합계 | 월~목 누계 | 금 누계 | 총 누계 |
@@ -618,6 +626,8 @@ interface HardRule {       // 후보 제외 규칙
 | GET | /api/history?year=&month=&grade= | 변경 이력 (권한 범위로 필터) | 로그인 |
 | GET | /api/stats?year=&month= | 월 현황 패널 (교사별 이번 달·누계, 공정성) | 로그인 |
 | GET | /api/stats/range?from=YYYY-MM&to=YYYY-MM | 기간 통계 (최대 24개월) | 로그인 |
+| POST | /api/teachers/:id/stats-exclusions | 통계 제외 월 등록 `{from: 'YYYY-MM', to?}` | ADMIN, 학년부장 |
+| DELETE | /api/teachers/:id/stats-exclusions/:recordId | 통계 제외 월 삭제 | ADMIN, 학년부장 |
 | GET | /api/public/duty/:year/:month | 감독표 배포 (F12) | API 연동 계정 키 또는 로그인 |
 | GET/POST | /api/api-clients | API 연동 계정 목록·생성 (생성 시 키 1회 반환) | ADMIN |
 | POST | /api/api-clients/:id/regenerate | 키 재발급 | ADMIN |
