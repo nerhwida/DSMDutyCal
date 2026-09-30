@@ -89,7 +89,7 @@ describe('미배정 칸 직접 지정', () => {
     expect((await teacher.post('/api/assignments').send({ date: '2034-01-03', grade: 1, teacherId: t.id })).status).toBe(403);
   });
 
-  it('이미 배정된 칸·운영일이 아닌 날·미편성·마감 월은 거부', async () => {
+  it('이미 배정된 칸·운영일이 아닌 날·마감 월은 거부', async () => {
     const t = await newTeacher('거부');
     const other = await newTeacher('거부기존');
     await setPlan(2034, 1, 1, 'CONFIRMED');
@@ -101,10 +101,31 @@ describe('미배정 칸 직접 지정', () => {
     expect((await fill('2034-01-04')).status).toBe(409); // 이미 배정
     expect((await fill('2034-01-07')).status).toBe(400); // 토요일
     expect((await fill('2034-01-05')).status).toBe(400); // 특별 일정
-    expect((await fill('2034-03-01')).status).toBe(409); // 미편성 월
 
     await setPlan(2034, 4, 1, 'CLOSED');
     expect((await fill('2034-04-03')).status).toBe(409); // 마감 월
+  });
+
+  it('미편성 월도 빈 칸에 수동 편성할 수 있고, 그 월은 미리보기가 되며 자동 편성 후에도 유지된다', async () => {
+    const t = await newTeacher('수동편성', [1]);
+    const admin = await loginFixture(process.env.ADMIN_NAME!, process.env.ADMIN_INITIAL_PIN!);
+
+    const candidates = await admin.get('/api/assignments/candidates?date=2034-03-01&grade=1');
+    expect(candidates.status).toBe(200);
+    expect(candidates.body.cell.status).toBe('EMPTY');
+    expect(candidates.body.candidates.find((c: { teacherId: number }) => c.teacherId === t.id).grades).toEqual([1]);
+
+    const res = await admin.post('/api/assignments').send({ date: '2034-03-01', grade: 1, teacherId: t.id });
+    expect(res.status).toBe(201);
+    const plan = await prisma.monthPlan.findUniqueOrThrow({ where: { year_month_grade: { year: 2034, month: 3, grade: 1 } } });
+    expect(plan.status).toBe('DRAFT');
+    const history = await prisma.assignmentHistory.findFirstOrThrow({ where: { assignmentId: res.body.id } });
+    expect(history.note).toContain('수동 편성');
+
+    // 자동 편성(DRAFT 다시 편성)은 수동으로 지정한 칸을 유지한다
+    expect((await admin.post('/api/months/2034/3/grades/1/generate')).status).toBe(200);
+    const kept = await prisma.assignment.findUniqueOrThrow({ where: { date_grade: { date: '2034-03-01', grade: 1 } } });
+    expect(kept).toMatchObject({ id: res.body.id, teacherId: t.id });
   });
 
   it('불가 사유가 있는 교사는 강제 배정일 때만, 같은 날 다른 학년 감독 중이면 강제로도 불가', async () => {

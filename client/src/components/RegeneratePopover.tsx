@@ -52,7 +52,7 @@ export function RegeneratePopover({ year, month, grade, status, onDone, onCancel
       </div>
       <label className="flex items-center gap-1 text-xs text-slate-600">
         <input type="checkbox" checked={includeModified} onChange={(e) => setIncludeModified(e.target.checked)} />
-        수동 변경 셀(↻)도 다시 편성
+        직접 지정·변경한 셀(↻ 포함)도 다시 편성
       </label>
       <ul className="list-disc space-y-0.5 pl-4 text-xs text-slate-500">
         {status === 'CONFIRMED' ? (

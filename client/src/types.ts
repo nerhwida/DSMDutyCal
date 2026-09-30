@@ -140,6 +140,8 @@ export interface Candidate {
   isCurrent: boolean;
   isOriginal: boolean;
   monthCount: number;
+  /** 교사의 담당 학년 (목록을 학년별로 묶을 때 사용) */
+  grades: Grade[];
 }
 
 export interface CellCandidatesResponse {

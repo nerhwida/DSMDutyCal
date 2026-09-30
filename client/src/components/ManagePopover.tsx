@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import { longDateLabel } from '../lib/date';
+import { CandidateList } from './CandidateList';
 import { GROUP_LABEL, type Candidate, type CandidatesResponse } from '../types';
 
 interface ManagePopoverProps {
@@ -79,33 +80,14 @@ export function ManagePopover({ assignmentId, onDone, onCancel }: ManagePopoverP
         </p>
       </div>
 
-      <ul className="max-h-60 overflow-y-auto rounded border border-slate-200">
-        {candidates.map((c) => {
-          const reason = c.blocking ?? (c.warnings.length > 0 ? c.warnings.join(', ') : null);
-          const enabled = selectable(c);
-          return (
-            <li key={c.teacherId}>
-              <button
-                type="button"
-                disabled={!enabled || closed}
-                onClick={() => setTeacherId(c.teacherId)}
-                className={`flex w-full items-center justify-between px-2 py-1 text-left ${
-                  teacherId === c.teacherId ? 'bg-slate-800 text-white' : enabled ? 'hover:bg-slate-50' : 'text-slate-300'
-                }`}
-              >
-                <span>
-                  {c.name} <span className="text-xs opacity-70">({c.monthCount})</span>
-                  {c.isCurrent && <span className="ml-1 text-xs">· 현재</span>}
-                  {c.isOriginal && !c.isCurrent && <span className="ml-1 text-xs">· 최초</span>}
-                </span>
-                {reason && (
-                  <span className={`text-xs ${c.blocking ? 'text-red-400' : 'text-amber-500'}`}>{reason}</span>
-                )}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+      <CandidateList
+        candidates={candidates}
+        grade={assignment.grade}
+        selectedId={teacherId}
+        selectable={selectable}
+        onSelect={setTeacherId}
+        disabled={closed}
+      />
 
       <label className="flex items-center gap-1 text-xs text-slate-600">
         <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} disabled={closed} />

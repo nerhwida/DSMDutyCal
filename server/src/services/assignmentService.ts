@@ -164,16 +164,20 @@ async function evaluateActiveTeachers(cell: { date: string; grade: number }, exc
     _count: { _all: true },
   });
   const monthCount = new Map(monthRows.map((r) => [r.teacherId, r._count._all]));
-  return evaluations.map((e) => ({ ...e, monthCount: monthCount.get(e.teacherId) ?? 0 }));
+  // 팝오버에서 학년별로 묶어 보여 주기 위한 담당 학년
+  const teacherGrades = await prisma.teacherGrade.findMany({ where: { teacherId: { in: activeIds } }, orderBy: { grade: 'asc' } });
+  const gradesOf = new Map<number, number[]>();
+  for (const tg of teacherGrades) gradesOf.set(tg.teacherId, [...(gradesOf.get(tg.teacherId) ?? []), tg.grade]);
+  return evaluations.map((e) => ({ ...e, grades: gradesOf.get(e.teacherId) ?? [], monthCount: monthCount.get(e.teacherId) ?? 0 }));
 }
 
 /**
- * 미배정 칸 직접 채우기의 대상 셀 검증: 담당 학년 권한, 편성된(미리보기·확정) 월, 운영일, 비어 있는 칸.
+ * 빈 칸 직접 채우기의 대상 셀 검증: 담당 학년 권한, 마감되지 않은 월, 운영일, 비어 있는 칸.
+ * 미편성(EMPTY) 월도 가능하다 — 저장하면 그 월·학년은 미리보기(DRAFT)가 된다.
  */
 async function assertFillableCell(date: string, grade: number, user: AuthenticatedUser) {
   assertGradeScope(user, grade);
   const status = await getPlanStatusForDate(date, grade as Grade);
-  if (status === 'EMPTY') throw new ServiceError(409, `${cellLabel({ date, grade })}: 아직 편성되지 않은 월입니다. 자동 편성을 먼저 실행해주세요.`);
   if (status === 'CLOSED') throw new ServiceError(409, `${cellLabel({ date, grade })}은(는) 마감된 월이라 변경할 수 없습니다.`);
 
   const [year, month] = date.split('-').map(Number);
@@ -219,7 +223,7 @@ export async function fillAssignment(
     });
   }
 
-  const note = ['[미배정 칸 지정]', input.force && e.warnings.length > 0 ? '[강제 배정]' : null, input.note]
+  const note = [status === 'EMPTY' ? '[수동 편성]' : '[미배정 칸 지정]', input.force && e.warnings.length > 0 ? '[강제 배정]' : null, input.note]
     .filter(Boolean)
     .join(' ');
   return prisma.$transaction(async (tx) => {
@@ -233,6 +237,15 @@ export async function fillAssignment(
         modifiedAt: new Date(),
       },
     });
+    // 미편성 월이면 수동 편성을 시작한 것이므로 미리보기(DRAFT)로 전환한다
+    if (status === 'EMPTY') {
+      const [year, month] = input.date.split('-').map(Number);
+      await tx.monthPlan.upsert({
+        where: { year_month_grade: { year, month, grade: input.grade } },
+        update: { status: 'DRAFT' },
+        create: { year, month, grade: input.grade, status: 'DRAFT' },
+      });
+    }
     await tx.assignmentHistory.create({
       data: {
         assignmentId: created.id,

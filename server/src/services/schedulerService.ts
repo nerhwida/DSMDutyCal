@@ -140,11 +140,21 @@ export async function loadSchedulerInput(
     });
   }
 
+  // 변경 이력이 있는 셀(빈 칸 수동 지정, 관리자 지정 등)은 표시(↻)가 없어도 수동 셀로 보고 편성에서 유지한다.
+  const manualIds = new Set(
+    (
+      await prisma.assignmentHistory.findMany({
+        where: { assignmentId: { in: existing.map((a) => a.id) } },
+        select: { assignmentId: true },
+        distinct: ['assignmentId'],
+      })
+    ).map((h) => h.assignmentId),
+  );
   const existingAssignments: ExistingAssignment[] = existing.map((a) => ({
     date: a.date,
     grade: a.grade as Grade,
     teacherId: a.teacherId,
-    isModified: a.isModified,
+    isModified: a.isModified || manualIds.has(a.id),
   }));
 
   return {

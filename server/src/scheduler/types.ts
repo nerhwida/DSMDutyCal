@@ -45,6 +45,7 @@ export interface ExistingAssignment {
   date: string;
   grade: Grade;
   teacherId: number;
+  /** 수동 변경·지정된 셀 (편성에서 유지). 서비스는 ↻ 표시 또는 변경 이력이 있으면 true로 넘긴다. */
   isModified: boolean;
 }
 

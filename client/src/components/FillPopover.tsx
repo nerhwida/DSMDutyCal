@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import { longDateLabel } from '../lib/date';
+import { CandidateList } from './CandidateList';
 import { GROUP_LABEL, type Candidate, type CellCandidatesResponse, type Grade } from '../types';
 
 interface FillPopoverProps {
@@ -12,7 +13,7 @@ interface FillPopoverProps {
   onCancel: () => void;
 }
 
-/** 미배정 칸 직접 지정 (학년부장·ADMIN). 관리 변경(F6)과 같은 선택 규칙. */
+/** 빈 칸 직접 지정 (학년부장·ADMIN). 미배정 칸과 미편성 월의 칸 모두. 관리 변경(F6)과 같은 선택 규칙. */
 export function FillPopover({ date, grade, reasons, onDone, onCancel }: FillPopoverProps) {
   const [data, setData] = useState<CellCandidatesResponse | null>(null);
   const [teacherId, setTeacherId] = useState<number | null>(null);
@@ -56,11 +57,18 @@ export function FillPopover({ date, grade, reasons, onDone, onCancel }: FillPopo
     <div className="space-y-3">
       <div>
         <p className="font-semibold text-slate-800">
-          {longDateLabel(date)} · {grade}학년 · <span className="text-red-600">미배정</span>
+          {longDateLabel(date)} · {grade}학년 ·{' '}
+          {data?.cell.status === 'EMPTY' ? <span className="text-slate-500">미편성</span> : <span className="text-red-600">미배정</span>}
         </p>
         {data && (
           <p className="text-xs text-slate-500">
             감독 교사를 직접 지정합니다 · 괄호 안은 이번 달 {GROUP_LABEL[data.cell.rotationGroup]} 감독 횟수
+          </p>
+        )}
+        {data?.cell.status === 'EMPTY' && (
+          <p className="mt-1 text-xs text-amber-700">
+            아직 편성하지 않은 달입니다. 지정하면 이 달 {grade}학년이 미리보기 상태가 되고, 나머지 칸은 비어 있는 채로 남습니다.
+            이후 자동 편성을 실행해도 직접 지정한 칸은 유지됩니다.
           </p>
         )}
       </div>
@@ -79,29 +87,13 @@ export function FillPopover({ date, grade, reasons, onDone, onCancel }: FillPopo
       {!data && <p className="text-xs text-slate-500">{error ?? '불러오는 중…'}</p>}
 
       {data && (
-        <ul className="max-h-60 overflow-y-auto rounded border border-slate-200">
-          {data.candidates.map((c) => {
-            const reason = c.blocking ?? (c.warnings.length > 0 ? c.warnings.join(', ') : null);
-            const enabled = selectable(c);
-            return (
-              <li key={c.teacherId}>
-                <button
-                  type="button"
-                  disabled={!enabled}
-                  onClick={() => setTeacherId(c.teacherId)}
-                  className={`flex w-full items-center justify-between px-2 py-1 text-left ${
-                    teacherId === c.teacherId ? 'bg-slate-800 text-white' : enabled ? 'hover:bg-slate-50' : 'text-slate-300'
-                  }`}
-                >
-                  <span>
-                    {c.name} <span className="text-xs opacity-70">({c.monthCount})</span>
-                  </span>
-                  {reason && <span className={`text-xs ${c.blocking ? 'text-red-400' : 'text-amber-500'}`}>{reason}</span>}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+        <CandidateList
+          candidates={data.candidates}
+          grade={grade}
+          selectedId={teacherId}
+          selectable={selectable}
+          onSelect={setTeacherId}
+        />
       )}
 
       <div className="space-y-1 text-xs text-slate-600">

@@ -143,7 +143,7 @@ export function CalendarPage() {
   }
 
   async function generate() {
-    if (actionStatus === 'DRAFT' && !window.confirm(`${ym.month}월 ${actionGrade}학년 미리보기를 다시 편성합니다. 수동 변경 셀은 유지됩니다. 계속할까요?`)) {
+    if (actionStatus === 'DRAFT' && !window.confirm(`${ym.month}월 ${actionGrade}학년 미리보기를 다시 편성합니다. 직접 지정·변경한 셀은 유지됩니다. 계속할까요?`)) {
       return;
     }
     setBusy(true);
@@ -468,6 +468,21 @@ export function CalendarPage() {
                             );
                           }
                           if (status === 'EMPTY') {
+                            // 미편성 월: 담당 학년부장·ADMIN은 칸을 눌러 수동 편성할 수 있다
+                            if (user!.gradeHeadOf.includes(g)) {
+                              return (
+                                <button
+                                  key={g}
+                                  type="button"
+                                  title="클릭하여 감독 교사 직접 지정 (수동 편성)"
+                                  onClick={(e) => setFillPopover({ date, grade: g, reasons: [], anchor: e.currentTarget.getBoundingClientRect() })}
+                                  className={`${base} group text-slate-300 hover:bg-slate-100 hover:text-slate-600`}
+                                >
+                                  <span className="w-3 text-slate-400">{g}</span>—
+                                  <span className="text-xs text-slate-400 opacity-0 group-hover:opacity-100 print:hidden">+ 지정</span>
+                                </button>
+                              );
+                            }
                             return (
                               <div key={g} className={`${base} text-slate-300`}>
                                 <span className="w-3 text-slate-400">{g}</span>—
