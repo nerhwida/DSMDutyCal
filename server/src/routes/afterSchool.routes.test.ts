@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app.js';
 import { findTeacherId, loginBody } from '../test/helpers.js';
+import { prisma } from '../lib/prisma.js';
+import { weekdayOf } from '../lib/dateUtils.js';
 
 const app = createApp();
 
@@ -72,5 +74,83 @@ describe('방과후 운영일', () => {
       { date: '2036-06-02', grades: [2] },
       { date: '2036-06-03', grades: [2] },
     ]);
+  });
+});
+
+// 2036-09-01(월)~09-05(금), 2036-10 사용
+async function afterSchoolTeacher(prefix: string, weekday: number) {
+  const t = await prisma.teacher.create({ data: { name: `${prefix}_${Date.now()}`, pinHash: 'x' } });
+  await prisma.teacherWeekdayExclusion.create({ data: { teacherId: t.id, weekday, reason: 'AFTER_SCHOOL' } });
+  return t;
+}
+
+async function confirmedCell(date: string, grade: number, teacherId: number, status: 'CONFIRMED' | 'CLOSED' = 'CONFIRMED') {
+  const [year, month] = date.split('-').map(Number);
+  await prisma.monthPlan.upsert({
+    where: { year_month_grade: { year, month, grade } },
+    update: { status },
+    create: { year, month, grade, status },
+  });
+  return prisma.assignment.create({
+    data: { date, grade, teacherId, originalTeacherId: teacherId, rotationGroup: weekdayOf(date) === 5 ? 'FRIDAY' : 'WEEKDAY' },
+  });
+}
+
+describe('방과후 운영일 지정 시 배정 취소', () => {
+  it('새로 적용되는 학년에 방과후 요일 교사가 배정돼 있으면 경고 후, 확인 시 그 배정만 취소한다', async () => {
+    const mon = await afterSchoolTeacher('월방과후', 1);
+    const plain = await prisma.teacher.create({ data: { name: `방과후없음_${Date.now()}`, pinHash: 'x' } });
+    const hit = await confirmedCell('2036-09-01', 1, mon.id); // 월요일 + 1학년 적용 → 취소 대상
+    const otherGrade = await confirmedCell('2036-09-01', 2, plain.id); // 방과후 교사 아님 → 유지
+    const head = await loginAgent('1학년부장', '1111');
+
+    const body = { startDate: '2036-09-01', endDate: '2036-09-05', grades: [1, 2] };
+    const warn = await head.post('/api/after-school-days').send(body);
+    expect(warn.status).toBe(409);
+    expect(warn.body.warning).toBe(true);
+    expect(warn.body.conflictingAssignments).toEqual([`9/1(월) 1학년 ${mon.name}`]);
+    expect(await prisma.afterSchoolDay.count({ where: { date: '2036-09-01' } })).toBe(0); // 저장 안 됨
+
+    const ok = await head.post('/api/after-school-days').send({ ...body, confirmRemoveAssignments: true });
+    expect(ok.status).toBe(201);
+    expect(ok.body).toMatchObject({ days: 5, added: 10, removedAssignments: 1 });
+    expect(await prisma.assignment.findUnique({ where: { id: hit.id } })).toBeNull();
+    expect(await prisma.assignment.findUnique({ where: { id: otherGrade.id } })).not.toBeNull();
+    expect(await prisma.notification.count({ where: { teacherId: mon.id, type: 'REMOVED_BY_CHANGE' } })).toBe(1);
+  });
+
+  it('날짜를 지정해 적용 학년을 그대로 바꾸고, 비우면 운영일에서 빠진다', async () => {
+    const tue = await afterSchoolTeacher('화방과후', 2);
+    const x = await confirmedCell('2036-09-02', 3, tue.id);
+    const admin = await loginAgent(process.env.ADMIN_NAME!, process.env.ADMIN_INITIAL_PIN!);
+
+    // 9/2(화)는 첫 테스트에서 1·2학년으로 등록됨 → 2·3학년으로 변경 (3학년 추가 시 화요일 방과후 교사 배정 충돌)
+    const warn = await admin.put('/api/after-school-days/2036-09-02').send({ grades: [2, 3] });
+    expect(warn.status).toBe(409);
+    const ok = await admin.put('/api/after-school-days/2036-09-02').send({ grades: [2, 3], confirmRemoveAssignments: true });
+    expect(ok.status).toBe(200);
+    expect(ok.body).toMatchObject({ grades: [2, 3], removedAssignments: 1 });
+    expect(await prisma.assignment.findUnique({ where: { id: x.id } })).toBeNull();
+    expect((await admin.get('/api/after-school-days?from=2036-09-02&to=2036-09-02')).body).toEqual([{ date: '2036-09-02', grades: [2, 3] }]);
+
+    expect((await admin.put('/api/after-school-days/2036-09-02').send({ grades: [] })).status).toBe(200);
+    expect((await admin.get('/api/after-school-days?from=2036-09-02&to=2036-09-02')).body).toEqual([]);
+    expect((await admin.put('/api/after-school-days/2036-09-06').send({ grades: [1] })).status).toBe(400); // 토요일
+  });
+
+  it('요일을 지정해 등록할 수 있고, 마감 월에 걸리면 거부한다', async () => {
+    const admin = await loginAgent(process.env.ADMIN_NAME!, process.env.ADMIN_INITIAL_PIN!);
+    const add = await admin.post('/api/after-school-days').send({ startDate: '2036-10-01', endDate: '2036-10-31', weekdays: [1, 3], grades: [2] });
+    expect(add.status).toBe(201);
+    const list = await admin.get('/api/after-school-days?from=2036-10-01&to=2036-10-31');
+    expect(list.body.every((d: { date: string }) => [1, 3].includes(weekdayOf(d.date)))).toBe(true);
+
+    const thu = await afterSchoolTeacher('목방과후', 4);
+    await confirmedCell('2036-10-02', 1, thu.id, 'CLOSED');
+    const res = await admin
+      .post('/api/after-school-days')
+      .send({ startDate: '2036-10-02', grades: [1], confirmRemoveAssignments: true });
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain('마감');
   });
 });
