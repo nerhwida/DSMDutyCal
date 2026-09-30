@@ -13,6 +13,7 @@ import { verifyPin } from '../auth/pin.js';
 import {
   excludedGradesByDate,
   generateSchedule,
+  gradeExclusions,
   monthBounds,
   operatingDays,
   unassignedReasons,
@@ -158,6 +159,15 @@ export async function loadSchedulerInput(
     startPointers: [...lastByQueue.values()],
     dates,
   };
+}
+
+/** [start, end] 기간의 편성 제외 (날짜 × 학년) = 특별 일정 + 방과후 운영일에 지정되지 않은 학년. */
+export async function gradeExclusionsBetween(start: string, end: string) {
+  const [specialDays, afterSchool] = await Promise.all([
+    prisma.specialDay.findMany({ where: { date: { gte: start, lte: end } } }),
+    afterSchoolDaysBetween(start, end),
+  ]);
+  return gradeExclusions(specialDays, afterSchool);
 }
 
 /** [start, end] 기간의 방과후 운영일 (날짜 × 학년). */
@@ -541,8 +551,11 @@ export async function getMonthView(year: number, month: number, user: Authentica
 
   const visible = assignments.filter((a) => visibleGrades.has(a.grade as Grade));
   // 특별 일정은 학년 단위: days는 한 학년이라도 운영하는 날, 학년별 운영일은 따로 계산한다.
-  const days = operatingDays(year, month, specialDays);
-  const excluded = excludedGradesByDate(specialDays);
+  const afterSchoolRows = await afterSchoolDaysBetween(start, end);
+  // 편성 제외 = 특별 일정 + 방과후 운영일에 지정되지 않은 학년
+  const exclusions = gradeExclusions(specialDays, afterSchoolRows);
+  const days = operatingDays(year, month, exclusions);
+  const excluded = excludedGradesByDate(exclusions);
   const operatingGradesOf = (date: string) => [1, 2, 3].filter((g) => !excluded.get(date)?.has(g));
 
   // 편성된(미편성 아님) 학년에서 그 학년의 운영일인데 배정이 없는 셀 = 미배정. 사유는 규칙을 다시 평가해 구한다.
@@ -550,12 +563,11 @@ export async function getMonthView(year: number, month: number, user: Authentica
   const unassignedCells = grades
     .filter((g) => g.status !== 'EMPTY' && g.assignmentsVisible)
     .flatMap((g) =>
-      operatingDays(year, month, specialDays, g.grade)
+      operatingDays(year, month, exclusions, g.grade)
         .filter((d) => !assigned.has(`${d}:${g.grade}`))
         .map((date) => ({ date, grade: g.grade })),
     );
   const teachersForReasons = unassignedCells.length > 0 ? await loadSchedulerTeachers(start, end) : [];
-  const afterSchoolRows = await afterSchoolDaysBetween(start, end);
   const afterSchool = new Set(afterSchoolRows.map((d) => `${d.date}:${d.grade}`));
   const afterSchoolGrades = new Map<string, number[]>();
   for (const d of afterSchoolRows) afterSchoolGrades.set(d.date, [...(afterSchoolGrades.get(d.date) ?? []), d.grade]);

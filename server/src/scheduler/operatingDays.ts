@@ -20,6 +20,27 @@ export function weekdaysOfMonth(year: number, month: number): string[] {
   });
 }
 
+/**
+ * 방과후 운영일에서 파생되는 편성 제외 (날짜 × 학년). 방과후 운영일에는 지정한 학년만 자습 감독이 있고,
+ * 지정하지 않은 학년은 그날 자습이 없어 편성하지 않는다. 예: 월요일 1학년 지정 → 그날 2·3학년 제외.
+ */
+export function afterSchoolExclusions(afterSchoolDays: Iterable<SpecialDayEntry>): SpecialDayEntry[] {
+  const designated = new Map<string, Set<number>>();
+  for (const d of afterSchoolDays) {
+    if (!designated.has(d.date)) designated.set(d.date, new Set());
+    designated.get(d.date)!.add(d.grade);
+  }
+  return [...designated].flatMap(([date, grades]) => [1, 2, 3].filter((g) => !grades.has(g)).map((grade) => ({ date, grade })));
+}
+
+/** 편성 제외 전체 = 특별 일정 + 방과후 운영일에 지정되지 않은 학년. */
+export function gradeExclusions(
+  specialDays: Iterable<SpecialDayEntry>,
+  afterSchoolDays: Iterable<SpecialDayEntry>,
+): SpecialDayEntry[] {
+  return [...[...specialDays].map((d) => ({ date: d.date, grade: d.grade })), ...afterSchoolExclusions(afterSchoolDays)];
+}
+
 /** 날짜 → 특별 일정으로 편성이 제외된 학년 집합. */
 export function excludedGradesByDate(specialDays: Iterable<SpecialDayEntry>): Map<string, Set<number>> {
   const map = new Map<string, Set<number>>();

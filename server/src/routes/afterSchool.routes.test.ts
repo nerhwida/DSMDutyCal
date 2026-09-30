@@ -108,7 +108,7 @@ describe('방과후 운영일 지정 시 배정 취소', () => {
     const warn = await head.post('/api/after-school-days').send(body);
     expect(warn.status).toBe(409);
     expect(warn.body.warning).toBe(true);
-    expect(warn.body.conflictingAssignments).toEqual([`9/1(월) 1학년 ${mon.name}`]);
+    expect(warn.body.conflictingAssignments).toEqual([`9/1(월) 1학년 ${mon.name} (방과후 수업)`]);
     expect(await prisma.afterSchoolDay.count({ where: { date: '2036-09-01' } })).toBe(0); // 저장 안 됨
 
     const ok = await head.post('/api/after-school-days').send({ ...body, confirmRemoveAssignments: true });
@@ -117,6 +117,30 @@ describe('방과후 운영일 지정 시 배정 취소', () => {
     expect(await prisma.assignment.findUnique({ where: { id: hit.id } })).toBeNull();
     expect(await prisma.assignment.findUnique({ where: { id: otherGrade.id } })).not.toBeNull();
     expect(await prisma.notification.count({ where: { teacherId: mon.id, type: 'REMOVED_BY_CHANGE' } })).toBe(1);
+  });
+
+  it('지정하지 않은 학년은 그날 자습이 없어 기존 배정이 취소되고, 편성 대상에서도 빠진다', async () => {
+    const plain = await prisma.teacher.create({ data: { name: `학년해제_${Date.now()}`, pinHash: 'x' } });
+    const g2 = await confirmedCell('2036-09-08', 2, plain.id); // 9/8(월) 2학년
+    const keeper = await prisma.teacher.create({ data: { name: `학년유지_${Date.now()}`, pinHash: 'x' } });
+    const g1 = await confirmedCell('2036-09-08', 1, keeper.id); // 9/8(월) 1학년 (방과후 없음) → 유지
+    const admin = await loginAgent(process.env.ADMIN_NAME!, process.env.ADMIN_INITIAL_PIN!);
+
+    const warn = await admin.post('/api/after-school-days').send({ startDate: '2036-09-08', grades: [1] });
+    expect(warn.status).toBe(409);
+    expect(warn.body.conflictingAssignments).toEqual([`9/8(월) 2학년 ${plain.name} (자습 없음)`]);
+    const ok = await admin.post('/api/after-school-days').send({ startDate: '2036-09-08', grades: [1], confirmRemoveAssignments: true });
+    expect(ok.status).toBe(201);
+    expect(await prisma.assignment.findUnique({ where: { id: g2.id } })).toBeNull();
+    expect(await prisma.assignment.findUnique({ where: { id: g1.id } })).not.toBeNull();
+
+    // 달력: 9/8은 1학년만 편성하는 날이고 2학년 미배정으로 보이지 않는다
+    const view = await admin.get('/api/months/2036/9');
+    expect(view.body.operatingDays.find((d: { date: string }) => d.date === '2036-09-08').grades).toEqual([1]);
+    expect(view.body.unassigned.some((u: { date: string; grade: number }) => u.date === '2036-09-08' && u.grade === 2)).toBe(false);
+    // 2학년 빈 칸 직접 지정도 운영일이 아니라 거부
+    const fill = await admin.post('/api/assignments').send({ date: '2036-09-08', grade: 2, teacherId: plain.id });
+    expect(fill.status).toBe(400);
   });
 
   it('날짜를 지정해 적용 학년을 그대로 바꾸고, 비우면 운영일에서 빠진다', async () => {

@@ -9,11 +9,12 @@ import { requireAuth, requireScheduleManager } from '../permissions/middleware.j
 import { removeAssignmentsTx } from '../services/assignmentService.js';
 
 /**
- * 방과후 운영일 (날짜 × 학년). 방과후 시간에 자습하는 학년을 지정하면, 그 학년 감독에서만
- * 그날 방과후 수업이 있는 교사(방과후 요일)를 제외한다. 조회는 로그인, 등록·변경·삭제는 ADMIN·학년부장.
+ * 방과후 운영일 (날짜 × 학년). 방과후 시간에 자습하는 학년을 지정한다. 그날은 지정한 학년만 자습 감독이 있고
+ * (지정하지 않은 학년은 편성하지 않음), 그 감독은 방과후 수업이 없는 교사가 맡는다(방과후 요일 교사 제외).
+ * 조회는 로그인, 등록·변경·삭제는 ADMIN·학년부장.
  *
- * 새로 운영일이 되는 (날짜, 학년)에 방과후 요일 교사가 이미 배정돼 있으면 409로 경고하고,
- * confirmRemoveAssignments=true면 그 배정을 취소(미배정)한 뒤 저장한다. 마감 월 배정이 걸리면 거부한다.
+ * 저장 결과로 이미 편성된 배정이 맞지 않게 되면(지정하지 않은 학년의 배정, 지정한 학년의 방과후 요일 교사 배정)
+ * 409로 경고하고, confirmRemoveAssignments=true면 그 배정을 취소(미배정)한 뒤 저장한다. 마감 월 배정이 걸리면 거부한다.
  */
 export const afterSchoolRouter = Router();
 afterSchoolRouter.use(requireAuth);
@@ -52,7 +53,7 @@ type Cell = { date: string; grade: number };
 const cellKey = (c: Cell) => `${c.date}:${c.grade}`;
 
 /**
- * 운영일 칸 추가·삭제를 저장한다. 추가되는 칸에 방과후 요일 교사가 배정돼 있으면 경고 → 확인 시 배정 취소.
+ * 운영일 칸 추가·삭제를 저장한다. 바뀌는 날짜의 저장 후 지정 학년 기준으로 맞지 않는 배정이 있으면 경고 → 확인 시 배정 취소.
  * status가 200이 아니면 저장하지 않은 것이다.
  */
 async function applyCells(
@@ -61,20 +62,31 @@ async function applyCells(
   confirmRemoveAssignments: boolean,
   actor: { id: number; name: string },
 ): Promise<{ status: number; body?: Record<string, unknown>; removedAssignments: number }> {
-  const addKeys = new Set(toAdd.map(cellKey));
+  // 바뀌는 날짜별 저장 후 지정 학년
+  const affectedDates = [...new Set([...toAdd, ...toRemove].map((c) => c.date))];
+  const removeKeys = new Set(toRemove.map(cellKey));
+  const designated = new Map<string, Set<number>>(affectedDates.map((d) => [d, new Set<number>()]));
+  const currentRows = affectedDates.length === 0 ? [] : await prisma.afterSchoolDay.findMany({ where: { date: { in: affectedDates } } });
+  for (const r of currentRows) if (!removeKeys.has(cellKey(r))) designated.get(r.date)!.add(r.grade);
+  for (const c of toAdd) designated.get(c.date)!.add(c.grade);
+
   const candidates =
-    toAdd.length === 0
+    affectedDates.length === 0
       ? []
       : await prisma.assignment.findMany({
-          where: { date: { in: [...new Set(toAdd.map((c) => c.date))] } },
+          where: { date: { in: affectedDates } },
           include: { teacher: { select: { name: true, weekdayExclusions: true } } },
         });
+  // 방과후 운영일이 아니게 된 날(지정 학년 없음)은 제한이 없다
+  const noStudy = (a: Cell) => designated.get(a.date)!.size > 0 && !designated.get(a.date)!.has(a.grade);
   const conflicts = candidates.filter(
     (a) =>
-      addKeys.has(cellKey(a)) &&
-      a.teacher.weekdayExclusions.some((e) => e.reason === 'AFTER_SCHOOL' && e.weekday === weekdayOf(a.date)),
+      noStudy(a) ||
+      (designated.get(a.date)!.has(a.grade) &&
+        a.teacher.weekdayExclusions.some((e) => e.reason === 'AFTER_SCHOOL' && e.weekday === weekdayOf(a.date))),
   );
-  const labels = (rows: typeof conflicts) => rows.map((a) => `${dateLabel(a.date)} ${a.grade}학년 ${a.teacher.name}`).sort();
+  const labels = (rows: typeof conflicts) =>
+    rows.map((a) => `${dateLabel(a.date)} ${a.grade}학년 ${a.teacher.name} (${noStudy(a) ? '자습 없음' : '방과후 수업'})`).sort();
 
   if (conflicts.length > 0) {
     const closed = await prisma.monthPlan.findMany({ where: { status: 'CLOSED' } });
@@ -99,7 +111,7 @@ async function applyCells(
         removedAssignments: 0,
         body: {
           warning: true,
-          error: '방과후 수업이 있는 교사가 이미 감독으로 배정된 칸이 있습니다. 계속하면 해당 배정이 취소(미배정)됩니다.',
+          error: '방과후 운영일 지정과 맞지 않는 감독 배정이 있습니다. 계속하면 해당 배정이 취소됩니다.',
           conflictingAssignments: labels(conflicts),
         },
       };

@@ -71,7 +71,10 @@ export interface SchedulerInput {
   teachers: SchedulerTeacher[];
   /** 특별 일정 (날짜 × 학년). 해당 날짜의 해당 학년은 편성하지 않는다. */
   specialDays: SpecialDayEntry[];
-  /** 방과후 운영일 (날짜 × 학년). 해당 날짜의 해당 학년 감독에서만 방과후 요일 교사를 제외한다. */
+  /**
+   * 방과후 운영일 (날짜 × 학년 = 그날 자습 감독이 있는 학년). 지정한 학년 감독에서는 방과후 요일 교사를 제외하고,
+   * 지정하지 않은 학년은 그날 편성하지 않는다.
+   */
   afterSchoolDays: SpecialDayEntry[];
   /** 해당 월의 기존 배정 (전 학년). */
   existingAssignments: ExistingAssignment[];

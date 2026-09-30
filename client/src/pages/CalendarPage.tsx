@@ -408,7 +408,7 @@ export function CalendarPage() {
                       </span>
                       {index.afterSchool.has(date) && (
                         <span
-                          title={`방과후 운영일: ${gradesLabel(index.afterSchool.get(date)!)} 감독에서 그날 방과후 수업이 있는 교사는 제외됩니다`}
+                          title={`방과후 운영일: ${gradesLabel(index.afterSchool.get(date)!)}만 자습 (방과후 수업이 없는 교사가 감독)`}
                           className="rounded bg-teal-50 px-1 text-xs text-teal-700 print:hidden"
                         >
                           방과후{index.afterSchool.get(date)!.length < 3 && ` ${index.afterSchool.get(date)!.join('·')}`}
@@ -450,6 +450,20 @@ export function CalendarPage() {
                               >
                                 <span className="w-3 opacity-70">{g}</span>
                                 <span className="truncate">{gradeSpecial.title}</span>
+                              </div>
+                            );
+                          }
+                          // 방과후 운영일에 지정되지 않은 학년은 그날 자습이 없다
+                          const afterSchoolGrades = index.afterSchool.get(date);
+                          if (afterSchoolGrades && !afterSchoolGrades.includes(g)) {
+                            return (
+                              <div
+                                key={g}
+                                title={`방과후 운영일 · ${gradesLabel(afterSchoolGrades)}만 자습 · ${g}학년 감독 미편성`}
+                                className={`${base} bg-teal-50/60 text-teal-700`}
+                              >
+                                <span className="w-3 opacity-70">{g}</span>
+                                <span className="truncate">방과후 · 자습 없음</span>
                               </div>
                             );
                           }

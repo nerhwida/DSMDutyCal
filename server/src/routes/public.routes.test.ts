@@ -76,6 +76,23 @@ describe('월별 감독표 배포 API (GET /api/public/duty/:year/:month)', () =
     expect((await agent.get(URL)).status).toBe(200);
   });
 
+  it('방과후 운영일에는 지정한 학년만 감독이 있고 나머지 학년 duty는 null이다', async () => {
+    const t = await prisma.teacher.create({ data: { name: `방과후배포_${Date.now()}`, pinHash: 'x' } });
+    for (const grade of [1, 2, 3]) {
+      await prisma.monthPlan.create({ data: { year: 2032, month: 4, grade, status: 'CONFIRMED' } });
+    }
+    await prisma.assignment.create({
+      data: { date: '2032-04-05', grade: 1, teacherId: t.id, originalTeacherId: t.id, rotationGroup: 'WEEKDAY' },
+    });
+    await prisma.afterSchoolDay.create({ data: { date: '2032-04-05', grade: 1 } });
+
+    const res = await admin.get('/api/public/duty/2032/4');
+    const day = res.body.days.find((d: { date: string }) => d.date === '2032-04-05');
+    expect(day.afterSchoolGrades).toEqual([1]);
+    expect(day.duty).toEqual({ '1': { teacherId: t.id, name: t.name }, '2': null, '3': null });
+    expect(res.body.days.find((d: { date: string }) => d.date === '2032-04-06').afterSchoolGrades).toBeUndefined();
+  });
+
   it('잘못된 월은 400', async () => {
     const { key } = await newClient('월 검증');
     expect((await request(app).get('/api/public/duty/2032/13').set('X-API-Key', key)).status).toBe(400);

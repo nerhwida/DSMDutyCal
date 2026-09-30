@@ -7,7 +7,7 @@ import { rotationGroupForWeekday, type Grade, type NotificationType, type Role }
 import type { AuthenticatedUser } from '../auth/authService.js';
 import { BLOCKING_RULE_IDS, allViolations, monthBounds, operatingDays } from '../scheduler/index.js';
 import type { ScheduleContext } from '../scheduler/index.js';
-import { ServiceError, getPlanStatusForDate, loadSchedulerTeachers } from './schedulerService.js';
+import { ServiceError, getPlanStatusForDate, gradeExclusionsBetween, loadSchedulerTeachers } from './schedulerService.js';
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -178,8 +178,7 @@ async function assertFillableCell(date: string, grade: number, user: Authenticat
 
   const [year, month] = date.split('-').map(Number);
   const { start, end } = monthBounds(year, month);
-  const specialDays = await prisma.specialDay.findMany({ where: { date: { gte: start, lte: end } } });
-  if (!operatingDays(year, month, specialDays, grade).includes(date)) {
+  if (!operatingDays(year, month, await gradeExclusionsBetween(start, end), grade).includes(date)) {
     throw new ServiceError(400, `${cellLabel({ date, grade })}은(는) 자율학습 운영일이 아닙니다.`);
   }
   if (await prisma.assignment.findUnique({ where: { date_grade: { date, grade } } })) {

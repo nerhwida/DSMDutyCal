@@ -1,7 +1,7 @@
 import { weekdayOf } from '../lib/dateUtils.js';
 import { rotationGroupForWeekday, type Grade, type RotationGroup } from '../lib/enums.js';
 import { computeFairness } from './fairness.js';
-import { excludedGradesByDate, operatingDays } from './operatingDays.js';
+import { excludedGradesByDate, gradeExclusions, operatingDays } from './operatingDays.js';
 import { DEFAULT_HARD_RULES, firstViolation, gradeEligibility } from './rules.js';
 import { selectTeacher } from './selection.js';
 import type {
@@ -41,8 +41,10 @@ export function generateSchedule(input: SchedulerInput, rules: HardRule[] = DEFA
   const targets = new Set<Grade>(input.targetGrades);
   const scope = input.dates ? new Set(input.dates) : null;
   // 특별 일정은 학년 단위: days는 한 학년이라도 운영하는 날, 학년별 제외는 isOperating으로 판단한다.
-  const days = operatingDays(input.year, input.month, input.specialDays);
-  const excluded = excludedGradesByDate(input.specialDays);
+  // 편성 제외 = 특별 일정 + 방과후 운영일에 지정되지 않은 학년 (그날 자습 없음)
+  const exclusions = gradeExclusions(input.specialDays, input.afterSchoolDays);
+  const days = operatingDays(input.year, input.month, exclusions);
+  const excluded = excludedGradesByDate(exclusions);
   const operating = new Set(days);
   const isOperating = (date: string, grade: number) => operating.has(date) && !excluded.get(date)?.has(grade);
   const afterSchoolCells = new Set(input.afterSchoolDays.map((d) => `${d.date}:${d.grade}`));

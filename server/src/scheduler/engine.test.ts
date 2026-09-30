@@ -133,17 +133,24 @@ describe('Scheduler Engine (6.5)', () => {
     expect(on('2026-10-26')).toBe(a.id);
   });
 
-  it('방과후 운영일은 지정한 학년 감독에만 적용된다', () => {
-    // A는 1·2학년 담당, 매주 월요일 방과후. 10월 월요일은 2학년만 방과후 운영일(2학년 자습)
+  it('방과후 운영일에는 지정한 학년만 편성하고, 그 감독은 방과후 수업이 없는 교사가 맡는다', () => {
+    // A: 1·2학년, 매주 월요일 방과후 / B: 1학년, 방과후 없음 / C: 2학년, 방과후 없음. 10월 월요일은 1학년만 자습(방과후 운영일)
     const a = teacher([1, 2], { weekdayExclusions: [{ weekday: 1, reason: 'AFTER_SCHOOL' }] });
+    const b = teacher([1]);
+    const c = teacher([2]);
     const mondays = operatingDays(YEAR, MONTH, []).filter((d) => weekdayOf(d) === 1);
-    const onlyA = generateSchedule(baseInput([a], { targetGrades: [1], afterSchoolDays: mondays.map((date) => ({ date, grade: 2 })) }));
-    // 1학년 감독에는 방과후 제외가 적용되지 않는다
-    expect(mondays.every((d) => onlyA.assignments.some((x) => x.date === d && x.teacherId === a.id))).toBe(true);
-
-    const grade2 = generateSchedule(baseInput([a], { targetGrades: [2], afterSchoolDays: mondays.map((date) => ({ date, grade: 2 })) }));
-    expect(grade2.assignments.some((x) => mondays.includes(x.date))).toBe(false);
-    expect(grade2.warnings.find((w) => w.date === mondays[0])?.reasons).toEqual([`${a.name}: 방과후 수업`]);
+    const result = generateSchedule(
+      baseInput([a, b, c], { targetGrades: [1, 2], afterSchoolDays: mondays.map((date) => ({ date, grade: 1 })) }),
+    );
+    for (const d of mondays) {
+      // 1학년은 방과후 수업이 없는 B가 감독
+      expect(result.assignments.find((x) => x.date === d && x.grade === 1)?.teacherId).toBe(b.id);
+      // 2학년은 그날 자습이 없어 편성하지 않고, 미배정 경고도 없다
+      expect(result.assignments.some((x) => x.date === d && x.grade === 2)).toBe(false);
+      expect(result.warnings.some((w) => w.date === d && w.grade === 2)).toBe(false);
+    }
+    // 월요일이 아닌 날은 2학년도 편성된다
+    expect(result.assignments.some((x) => x.grade === 2 && weekdayOf(x.date) !== 1)).toBe(true);
   });
 
   it('방과후가 아닌 요일 제외(기타)는 운영일과 관계없이 항상 제외된다', () => {

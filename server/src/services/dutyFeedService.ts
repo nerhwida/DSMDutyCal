@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma.js';
 import { dateRange, weekdayOf } from '../lib/dateUtils.js';
 import type { MonthPlanStatus } from '../lib/enums.js';
 import { monthBounds } from '../scheduler/index.js';
+import { afterSchoolDaysBetween } from './schedulerService.js';
 
 const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -15,12 +16,14 @@ type DutyTeacher = { teacherId: number; name: string } | null;
  * 해당 월의 모든 날짜를 포함하고, 운영일에만 학년별 감독 교사를 채운다.
  * - type: WEEKEND(주말) | SPECIAL(전 학년 특별 일정) | OPERATING(한 학년 이상 운영)
  * - specialDays: 그 날의 학년별 특별 일정 목록 (있을 때만). OPERATING 날의 제외 학년은 duty가 null.
+ * - afterSchoolGrades: 방과후 운영일이면 그날 자습 감독이 있는 학년 (있을 때만). 나머지 학년은 duty가 null.
  */
 export async function getDutyFeed(year: number, month: number) {
   const { start, end } = monthBounds(year, month);
-  const [plans, specialDays, assignments] = await Promise.all([
+  const [plans, specialDays, afterSchool, assignments] = await Promise.all([
     prisma.monthPlan.findMany({ where: { year, month } }),
     prisma.specialDay.findMany({ where: { date: { gte: start, lte: end } } }),
+    afterSchoolDaysBetween(start, end),
     prisma.assignment.findMany({
       where: { date: { gte: start, lte: end } },
       include: { teacher: { select: { name: true } } },
@@ -38,6 +41,8 @@ export async function getDutyFeed(year: number, month: number) {
     if (!specialsByDate.has(s.date)) specialsByDate.set(s.date, []);
     specialsByDate.get(s.date)!.push({ grade: s.grade, type: s.type, title: s.title });
   }
+  const afterSchoolByDate = new Map<string, number[]>();
+  for (const d of afterSchool) afterSchoolByDate.set(d.date, [...(afterSchoolByDate.get(d.date) ?? []), d.grade]);
   const dutyByKey = new Map(
     assignments
       .filter((a) => published.has(a.grade))
@@ -47,12 +52,20 @@ export async function getDutyFeed(year: number, month: number) {
   const days = dateRange(start, end).map((date) => {
     const w = weekdayOf(date);
     const specials = specialsByDate.get(date) ?? [];
-    const base = { date, weekday: WEEKDAY_KO[w], ...(specials.length > 0 && { specialDays: specials }) };
+    const afterSchoolGrades = afterSchoolByDate.get(date);
+    const base = {
+      date,
+      weekday: WEEKDAY_KO[w],
+      ...(specials.length > 0 && { specialDays: specials }),
+      ...(afterSchoolGrades && w >= 1 && w <= 5 && { afterSchoolGrades }),
+    };
     if (w === 0 || w === 6) return { ...base, type: 'WEEKEND' as const };
     // 전 학년이 특별 일정이면 SPECIAL, 일부 학년만이면 OPERATING이고 해당 학년 duty는 null
     const excluded = new Set(specials.map((s) => s.grade));
     if (excluded.size === 3) return { ...base, type: 'SPECIAL' as const };
-    const dutyOf = (g: number): DutyTeacher => (excluded.has(g) ? null : (dutyByKey.get(`${date}:${g}`) ?? null));
+    // 방과후 운영일에 지정되지 않은 학년은 그날 자습이 없다
+    const noStudy = (g: number) => excluded.has(g) || (afterSchoolGrades !== undefined && !afterSchoolGrades.includes(g));
+    const dutyOf = (g: number): DutyTeacher => (noStudy(g) ? null : (dutyByKey.get(`${date}:${g}`) ?? null));
     const duty: Record<'1' | '2' | '3', DutyTeacher> = { '1': dutyOf(1), '2': dutyOf(2), '3': dutyOf(3) };
     return { ...base, type: 'OPERATING' as const, duty };
   });

@@ -19,8 +19,8 @@ type AfterSchoolDay = { date: string; grades: Grade[] };
 type SaveRequest = { label: string; send: (confirmRemoveAssignments: boolean) => Promise<string> };
 
 /**
- * 방과후 운영일 (날짜 × 학년). 방과후 시간에 자습하는 학년을 지정하면, 그 학년 감독에서만
- * 그날 방과후 수업이 있는 교사(방과후 요일)가 제외된다. 관리자·학년부장이 기간 단위로 등록하고,
+ * 방과후 운영일 (날짜 × 학년). 방과후 시간에 자습하는 학년을 지정하면 그날은 그 학년만 감독을 편성하고,
+ * 감독은 방과후 수업이 없는 교사(방과후 요일이 아닌 교사)가 맡는다. 관리자·학년부장이 기간 단위로 등록하고,
  * 달력에서 날짜를 눌러 그날의 학년을 바로 고친다.
  */
 export function AfterSchoolSection({ canManage }: { canManage: boolean }) {
@@ -78,7 +78,7 @@ export function AfterSchoolSection({ canManage }: { canManage: boolean }) {
     }
   }
 
-  const removedNote = (n: number) => (n > 0 ? ` 방과후 수업이 있는 교사의 감독 배정 ${n}건을 취소했습니다.` : '');
+  const removedNote = (n: number) => (n > 0 ? ` 맞지 않는 감독 배정 ${n}건을 취소했습니다.` : '');
   const weekdayParam = weekdays.length === WEEKDAYS.length ? undefined : weekdays;
   const weekdayText = weekdayParam ? ` (${WEEKDAYS.filter((w) => weekdays.includes(w.value)).map((w) => w.label).join('·')}요일)` : '';
 
@@ -136,9 +136,10 @@ export function AfterSchoolSection({ canManage }: { canManage: boolean }) {
       <div>
         <h3 className="text-sm font-semibold text-slate-700">방과후 운영일</h3>
         <p className="mt-1 text-xs text-slate-500">
-          방과후 수업이 열리는 날과, 방과후 시간에 자습하는 학년을 지정합니다. 지정한 학년의 감독은 그날 방과후 수업이 없는
-          교사가 맡습니다(교사에게 지정된 <b>방과후 요일</b>이면 제외). 지정하지 않은 학년과 운영하지 않는 날(시험 기간 등)에는
-          방과후 교사도 감독에 배정될 수 있습니다. 이미 감독으로 편성된 방과후 교사는 지정할 때 확인 후 배정이 취소됩니다.
+          방과후 수업이 열리는 날과, 그 시간에 자습하는 학년을 지정합니다. 그날은 <b>지정한 학년만 자습 감독</b>을 편성하고
+          (지정하지 않은 학년은 감독 없음), 감독은 그 학년 교사 중 방과후 수업이 없는 교사가 맡습니다(교사에게 지정된{' '}
+          <b>방과후 요일</b>이면 제외). 예: 월요일 1학년 지정 → 월요일은 1학년만 편성, 2·3학년 감독 해제. 운영하지 않는 날(시험
+          기간 등)에는 전 학년을 편성합니다. 이미 편성된 감독 중 맞지 않는 배정은 지정할 때 확인 후 취소됩니다.
           {canManage && ' 아래 달력에서 날짜를 누르면 그날의 자습 감독 학년을 바로 고를 수 있습니다.'}
         </p>
       </div>
@@ -197,7 +198,10 @@ export function AfterSchoolSection({ canManage }: { canManage: boolean }) {
 
       {pending && (
         <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
-          <p>방과후 수업이 있는 교사가 이미 감독으로 편성되어 있습니다. 계속하면 아래 배정이 취소되어 미배정 칸이 됩니다.</p>
+          <p>
+            방과후 운영일 지정과 맞지 않는 감독 배정이 있습니다. 계속하면 아래 배정이 취소됩니다 (자습 없음: 그날 감독 해제,
+            방과후 수업: 미배정 칸이 되어 다시 지정).
+          </p>
           <ul className="mt-1 list-disc pl-5 text-xs">
             {pending.assignments.map((a) => (
               <li key={a}>{a}</li>
