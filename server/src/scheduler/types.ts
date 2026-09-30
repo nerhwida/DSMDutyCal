@@ -22,6 +22,8 @@ export interface ScheduleContext {
   grade: Grade;
   group: RotationGroup;
   dayAssignments: Map<number, number>; // grade → teacherId (당일 이미 배정)
+  /** 방과후 운영일인지. 교사의 방과후 요일은 운영일에만 감독 제외로 적용된다. */
+  afterSchoolDay: boolean;
 }
 
 export type RuleResult = { ok: true } | { ok: false; reason: string };
@@ -70,6 +72,8 @@ export interface SchedulerInput {
   teachers: SchedulerTeacher[];
   /** 특별 일정 (날짜 × 학년). 해당 날짜의 해당 학년은 편성하지 않는다. */
   specialDays: SpecialDayEntry[];
+  /** 방과후 운영일 ('YYYY-MM-DD'). 이 날에만 방과후 요일 교사를 제외한다. */
+  afterSchoolDays: string[];
   /** 해당 월의 기존 배정 (전 학년). */
   existingAssignments: ExistingAssignment[];
   priorCounts: CountEntry[];

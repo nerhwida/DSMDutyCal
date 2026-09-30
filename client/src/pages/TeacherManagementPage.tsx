@@ -147,6 +147,9 @@ export function TeacherManagementPage() {
         {notice && (
           <p className="mb-2 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">{notice}</p>
         )}
+        <p className="mb-2 text-xs text-slate-500">
+          방과후 요일은 <b>일정 관리 → 방과후 운영일</b>에 등록된 날에만 감독에서 제외됩니다.
+        </p>
 
         <div className="overflow-x-auto rounded border border-slate-200 bg-white">
           <table className="w-full min-w-[1000px] text-sm">

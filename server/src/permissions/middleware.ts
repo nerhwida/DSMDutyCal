@@ -52,6 +52,17 @@ export function restrictApiKeyToPublic(req: Request, res: Response, next: NextFu
   next();
 }
 
+/**
+ * 일정 관리(특별 일정·방과후 운영일): ADMIN 또는 학년부장(담당 학년과 무관하게 모든 학년).
+ * ADMIN은 gradeHeadOf=[1,2,3]이므로 "학년부장 권한이 하나라도 있으면" 허용과 같다.
+ */
+export function requireScheduleManager(req: Request, res: Response, next: NextFunction) {
+  if (!req.user || req.user.gradeHeadOf.length === 0) {
+    return res.status(403).json({ error: '관리자 또는 학년부장만 일정을 관리할 수 있습니다.' });
+  }
+  next();
+}
+
 /** 시스템 관리자(ADMIN) 전용 기능. */
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   if (!req.user?.isAdmin) {

@@ -28,13 +28,18 @@ export const fridayEligibility: HardRule = {
   },
 };
 
-/** 방과후 수업 등 요일 제외. */
+/**
+ * 요일 제외.
+ * - 방과후 수업(AFTER_SCHOOL): 그 요일이면서 **방과후 운영일**인 날에만 제외 (시험 기간 등 운영하지 않는 날은 감독 가능)
+ * - 기타(OTHER): 그 요일이면 항상 제외
+ */
 export const weekdayExclusion: HardRule = {
   id: 'WeekdayExclusion',
   check: (teacher, ctx) => {
     const ex = teacher.weekdayExclusions.find((e) => e.weekday === ctx.weekday);
     if (!ex) return OK;
-    return { ok: false, reason: ex.reason === 'AFTER_SCHOOL' ? '방과후 수업' : '요일 제외' };
+    if (ex.reason === 'AFTER_SCHOOL') return ctx.afterSchoolDay ? { ok: false, reason: '방과후 수업' } : OK;
+    return { ok: false, reason: '요일 제외' };
   },
 };
 

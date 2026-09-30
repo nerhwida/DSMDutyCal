@@ -108,6 +108,13 @@ model SpecialDay {
   @@unique([date, grade])
 }
 
+/// 방과후 운영일 (학교 전체). 교사의 방과후 요일(TeacherWeekdayExclusion AFTER_SCHOOL)은
+/// 이 운영일에 해당하는 날에만 감독 제외로 적용된다. (시험 기간 등 방과후가 없는 날은 감독 가능)
+model AfterSchoolDay {
+  id    Int    @id @default(autoincrement())
+  date  String @unique // 'YYYY-MM-DD'
+}
+
 /// 월별(월 x 학년) 편성 상태. status: 'EMPTY' | 'DRAFT' | 'CONFIRMED' | 'CLOSED'
 model MonthPlan {
   id            Int       @id @default(autoincrement())

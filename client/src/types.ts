@@ -102,6 +102,8 @@ export interface MonthView {
   operatingDays: { date: string; weekday: number; group: RotationGroup; grades: Grade[] }[];
   /** 특별 일정은 (날짜 × 학년) 단위 */
   specialDays: { date: string; grade: Grade; type: SpecialDayType; title: string }[];
+  /** 방과후 운영일 (이 날에만 방과후 요일 교사가 감독에서 제외됨) */
+  afterSchoolDays: string[];
   assignments: AssignmentView[];
   unassigned: { date: string; grade: Grade; reasons: string[] }[];
 }

@@ -99,9 +99,10 @@ export async function loadSchedulerInput(
 ): Promise<SchedulerInput> {
   const { start, end } = monthBounds(year, month);
 
-  const [schedulerTeachers, specialDays, existing, initialCounts, confirmedPlans, priorAssignments] = await Promise.all([
+  const [schedulerTeachers, specialDays, afterSchoolDays, existing, initialCounts, confirmedPlans, priorAssignments] = await Promise.all([
     loadSchedulerTeachers(start, end),
     prisma.specialDay.findMany({ where: { date: { gte: start, lte: end } } }),
+    afterSchoolDaysBetween(start, end),
     prisma.assignment.findMany({ where: { date: { gte: start, lte: end } } }),
     prisma.initialCount.findMany(),
     prisma.monthPlan.findMany({ where: { status: { in: CONFIRMED_STATUSES } } }),
@@ -152,11 +153,18 @@ export async function loadSchedulerInput(
     targetGrades,
     teachers: schedulerTeachers,
     specialDays: specialDays.map((d) => ({ date: d.date, grade: d.grade })),
+    afterSchoolDays,
     existingAssignments,
     priorCounts,
     startPointers: [...lastByQueue.values()],
     dates,
   };
+}
+
+/** [start, end] 기간의 방과후 운영일 목록. */
+export async function afterSchoolDaysBetween(start: string, end: string): Promise<string[]> {
+  const rows = await prisma.afterSchoolDay.findMany({ where: { date: { gte: start, lte: end } }, orderBy: { date: 'asc' } });
+  return rows.map((r) => r.date);
 }
 
 export interface GenerateResult {
@@ -502,12 +510,20 @@ export async function getMonthView(year: number, month: number, user: Authentica
         .map((date) => ({ date, grade: g.grade })),
     );
   const teachersForReasons = unassignedCells.length > 0 ? await loadSchedulerTeachers(start, end) : [];
+  const afterSchool = new Set(await afterSchoolDaysBetween(start, end));
   const unassigned = unassignedCells.map(({ date, grade }) => {
     const weekday = weekdayOf(date);
     const dayAssignments = new Map(
       assignments.filter((a) => a.date === date).map((a) => [a.grade, a.teacherId] as [number, number]),
     );
-    const ctx = { date, weekday, grade, group: rotationGroupForWeekday(weekday), dayAssignments };
+    const ctx = {
+      date,
+      weekday,
+      grade,
+      group: rotationGroupForWeekday(weekday),
+      dayAssignments,
+      afterSchoolDay: afterSchool.has(date),
+    };
     return { date, grade, reasons: unassignedReasons(teachersForReasons, ctx) };
   });
 
@@ -533,6 +549,8 @@ export async function getMonthView(year: number, month: number, user: Authentica
       grades: operatingGradesOf(date),
     })),
     specialDays: specialDays.map((d) => ({ date: d.date, grade: d.grade, type: d.type, title: d.title })),
+    /** 방과후 운영일 (달력 표시용) */
+    afterSchoolDays: [...afterSchool],
     assignments: visible.map((a) => ({
       id: a.id,
       date: a.date,

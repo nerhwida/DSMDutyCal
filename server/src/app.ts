@@ -7,6 +7,7 @@ import { authRouter } from './routes/auth.routes.js';
 import { teachersRouter, gradeOrderRouter } from './routes/teachers.routes.js';
 import { gradeHeadsRouter } from './routes/gradeHeads.routes.js';
 import { specialDaysRouter } from './routes/specialDays.routes.js';
+import { afterSchoolRouter } from './routes/afterSchool.routes.js';
 import { initialCountsRouter } from './routes/initialCounts.routes.js';
 import { monthsRouter } from './routes/months.routes.js';
 import { assignmentsRouter } from './routes/assignments.routes.js';
@@ -44,6 +45,7 @@ export function createApp() {
   app.use('/api/grades', gradeOrderRouter);
   app.use('/api/grade-heads', gradeHeadsRouter);
   app.use('/api/special-days', specialDaysRouter);
+  app.use('/api/after-school-days', afterSchoolRouter);
   app.use('/api/initial-counts', initialCountsRouter);
   app.use('/api/months', monthsRouter);
   app.use('/api/assignments', assignmentsRouter);

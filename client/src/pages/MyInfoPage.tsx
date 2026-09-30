@@ -78,7 +78,10 @@ export function MyInfoPage() {
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <div>
-        <h3 className="mb-2 text-sm font-semibold text-slate-700">방과후 수업 요일</h3>
+        <h3 className="mb-1 text-sm font-semibold text-slate-700">방과후 수업 요일</h3>
+        <p className="mb-2 text-xs text-slate-500">
+          체크한 요일은 <b>방과후 운영일</b>(일정 관리에서 등록)에 해당하는 날에만 감독에서 제외됩니다.
+        </p>
         <div className="flex gap-4">
           {WEEKDAYS.map((w) => {
             const checked = me.weekdayExclusions.some(

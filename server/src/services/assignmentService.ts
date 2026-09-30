@@ -24,9 +24,14 @@ async function dayAssignmentsOf(db: Db, date: string, excludeIds: number[]): Pro
   return new Map(rows.map((r) => [r.grade, r.teacherId]));
 }
 
-function contextFor(date: string, grade: number, dayAssignments: Map<number, number>): ScheduleContext {
+function contextFor(
+  date: string,
+  grade: number,
+  dayAssignments: Map<number, number>,
+  afterSchoolDay: boolean,
+): ScheduleContext {
   const weekday = weekdayOf(date);
-  return { date, weekday, grade: grade as Grade, group: rotationGroupForWeekday(weekday), dayAssignments };
+  return { date, weekday, grade: grade as Grade, group: rotationGroupForWeekday(weekday), dayAssignments, afterSchoolDay };
 }
 
 export interface TeacherEvaluation {
@@ -45,11 +50,12 @@ async function evaluateTeachers(
   excludeIds: number[],
   teacherIds?: number[],
 ): Promise<TeacherEvaluation[]> {
-  const [teachers, dayAssignments] = await Promise.all([
+  const [teachers, dayAssignments, afterSchoolDay] = await Promise.all([
     loadSchedulerTeachers(cell.date, cell.date, teacherIds),
     dayAssignmentsOf(db, cell.date, excludeIds),
+    db.afterSchoolDay.findUnique({ where: { date: cell.date } }),
   ]);
-  const ctx = contextFor(cell.date, cell.grade, dayAssignments);
+  const ctx = contextFor(cell.date, cell.grade, dayAssignments, afterSchoolDay !== null);
   return teachers.map((t) => {
     const violations = allViolations(t, ctx);
     return {

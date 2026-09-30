@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
+import { AfterSchoolSection } from '../components/AfterSchoolSection';
 import type { Grade, SpecialDay, SpecialDayType } from '../types';
 import { SPECIAL_DAY_TYPE_LABEL } from '../types';
 
@@ -29,6 +30,33 @@ function groupRows(rows: SpecialDay[]): SpecialGroup[] {
   return [...map.values()].map((g) => ({ ...g, grades: g.grades.sort() }));
 }
 
+function GradeChecks({ value, onChange }: { value: Grade[]; onChange: (grades: Grade[]) => void }) {
+  return (
+    <div className="flex items-center gap-3 text-sm">
+      {GRADES.map((g) => (
+        <label key={g} className="flex items-center gap-1">
+          <input
+            type="checkbox"
+            checked={value.includes(g)}
+            onChange={(e) => onChange(e.target.checked ? [...new Set([...value, g])].sort() : value.filter((x) => x !== g))}
+          />
+          {g}학년
+        </label>
+      ))}
+    </div>
+  );
+}
+
+interface EditState {
+  group: SpecialGroup;
+  date: string;
+  type: SpecialDayType;
+  title: string;
+  grades: Grade[];
+  conflictCells: string[] | null;
+  error: string | null;
+}
+
 export function SpecialDaysPage() {
   const { user } = useAuth();
   const [days, setDays] = useState<SpecialDay[]>([]);
@@ -41,6 +69,7 @@ export function SpecialDaysPage() {
   const [title, setTitle] = useState('');
   const [grades, setGrades] = useState<Grade[]>([...GRADES]);
   const [seedYear, setSeedYear] = useState(new Date().getFullYear());
+  const [edit, setEdit] = useState<EditState | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -58,11 +87,8 @@ export function SpecialDaysPage() {
   const groups = useMemo(() => groupRows(days), [days]);
 
   if (!user) return null;
-
-  function toggleGrade(g: Grade, checked: boolean) {
-    setGrades((cur) => (checked ? [...new Set([...cur, g])].sort() : cur.filter((x) => x !== g)));
-    setConflict(null);
-  }
+  // 관리자·학년부장(모든 학년)이 일정을 관리한다. ADMIN은 gradeHeadOf=[1,2,3].
+  const canManage = user.gradeHeadOf.length > 0;
 
   async function submit(confirmDeleteAssignments = false) {
     setError(null);
@@ -90,6 +116,33 @@ export function SpecialDaysPage() {
     }
   }
 
+  function startEdit(group: SpecialGroup) {
+    setEdit({ group, date: group.date, type: group.type, title: group.title, grades: group.grades, conflictCells: null, error: null });
+  }
+
+  async function saveEdit(confirmDeleteAssignments = false) {
+    if (!edit) return;
+    try {
+      await api.put('/api/special-days/group', {
+        ids: edit.group.ids,
+        date: edit.date,
+        type: edit.type,
+        title: edit.title,
+        grades: edit.grades,
+        confirmDeleteAssignments,
+      });
+      setEdit(null);
+      await load();
+    } catch (err) {
+      const body = err instanceof ApiError ? (err.body as { warning?: boolean; conflictingCells?: string[] }) : undefined;
+      setEdit({
+        ...edit,
+        conflictCells: body?.warning ? (body.conflictingCells ?? []) : null,
+        error: err instanceof Error ? err.message : '수정에 실패했습니다.',
+      });
+    }
+  }
+
   async function remove(group: SpecialGroup) {
     try {
       await api.delete(`/api/special-days?ids=${group.ids.join(',')}`);
@@ -114,8 +167,9 @@ export function SpecialDaysPage() {
       <h2 className="text-base font-semibold text-slate-800">일정 관리</h2>
       {error && <p className="text-sm text-red-600">{error}</p>}
 
-      {user.isAdmin && (
+      {canManage && (
         <div className="space-y-3 rounded border border-slate-200 bg-white p-4">
+          <h3 className="text-sm font-semibold text-slate-700">특별 일정 등록</h3>
           <div className="flex flex-wrap items-end gap-2">
             <div>
               <label className="block text-xs text-slate-500">시작일</label>
@@ -159,13 +213,14 @@ export function SpecialDaysPage() {
             </div>
             <div>
               <label className="block text-xs text-slate-500">감독 제외 학년</label>
-              <div className="flex h-[30px] items-center gap-3 text-sm">
-                {GRADES.map((g) => (
-                  <label key={g} className="flex items-center gap-1">
-                    <input type="checkbox" checked={grades.includes(g)} onChange={(e) => toggleGrade(g, e.target.checked)} />
-                    {g}학년
-                  </label>
-                ))}
+              <div className="flex h-[30px] items-center">
+                <GradeChecks
+                  value={grades}
+                  onChange={(g) => {
+                    setGrades(g);
+                    setConflict(null);
+                  }}
+                />
               </div>
             </div>
             <button
@@ -222,31 +277,91 @@ export function SpecialDaysPage() {
               <th className="px-3 py-2 text-left">유형</th>
               <th className="px-3 py-2 text-left">일정명</th>
               <th className="px-3 py-2 text-left">감독 제외 학년</th>
-              {user.isAdmin && <th className="px-3 py-2 text-left">관리</th>}
+              {canManage && <th className="px-3 py-2 text-left">관리</th>}
             </tr>
           </thead>
           <tbody>
-            {groups.map((g) => (
-              <tr key={g.key} className="border-t border-slate-100">
-                <td className="px-3 py-2">{g.date}</td>
-                <td className="px-3 py-2">{SPECIAL_DAY_TYPE_LABEL[g.type]}</td>
-                <td className="px-3 py-2">{g.title}</td>
-                <td className="px-3 py-2">
-                  {g.grades.length === 3 ? (
-                    <span className="text-slate-600">전 학년</span>
-                  ) : (
-                    <span className="rounded bg-amber-50 px-1.5 text-amber-800">{g.grades.join('·')}학년</span>
-                  )}
-                </td>
-                {user.isAdmin && (
+            {groups.map((g) =>
+              edit?.group.key === g.key ? (
+                <tr key={g.key} className="border-t border-slate-100 bg-sky-50/50 align-top">
                   <td className="px-3 py-2">
-                    <button className="text-xs text-red-600 underline" onClick={() => remove(g)}>
-                      삭제
+                    <input
+                      type="date"
+                      value={edit.date}
+                      onChange={(e) => setEdit({ ...edit, date: e.target.value, conflictCells: null, error: null })}
+                      className="rounded border border-slate-300 px-2 py-1 text-sm"
+                    />
+                  </td>
+                  <td className="px-3 py-2">
+                    <select
+                      value={edit.type}
+                      onChange={(e) => setEdit({ ...edit, type: e.target.value as SpecialDayType })}
+                      className="rounded border border-slate-300 px-2 py-1 text-sm"
+                    >
+                      {TYPES.map((t) => (
+                        <option key={t} value={t}>
+                          {SPECIAL_DAY_TYPE_LABEL[t]}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-3 py-2">
+                    <input
+                      value={edit.title}
+                      onChange={(e) => setEdit({ ...edit, title: e.target.value })}
+                      className="w-full rounded border border-slate-300 px-2 py-1 text-sm"
+                    />
+                    {edit.error && <p className="mt-1 text-xs text-red-600">{edit.error}</p>}
+                    {edit.conflictCells && (
+                      <div className="mt-1 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
+                        배정이 있는 날짜·학년: {edit.conflictCells.join(', ')} — 계속하면 해당 배정이 삭제됩니다.
+                        <button onClick={() => saveEdit(true)} className="ml-2 rounded bg-amber-700 px-2 py-0.5 text-white">
+                          배정 삭제 후 저장
+                        </button>
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    <GradeChecks value={edit.grades} onChange={(gr) => setEdit({ ...edit, grades: gr, conflictCells: null, error: null })} />
+                  </td>
+                  <td className="space-x-2 whitespace-nowrap px-3 py-2">
+                    <button
+                      className="rounded bg-slate-800 px-2 py-0.5 text-xs text-white disabled:opacity-40"
+                      disabled={!edit.date || !edit.title || edit.grades.length === 0}
+                      onClick={() => saveEdit(false)}
+                    >
+                      저장
+                    </button>
+                    <button className="text-xs text-slate-600 underline" onClick={() => setEdit(null)}>
+                      취소
                     </button>
                   </td>
-                )}
-              </tr>
-            ))}
+                </tr>
+              ) : (
+                <tr key={g.key} className="border-t border-slate-100">
+                  <td className="px-3 py-2">{g.date}</td>
+                  <td className="px-3 py-2">{SPECIAL_DAY_TYPE_LABEL[g.type]}</td>
+                  <td className="px-3 py-2">{g.title}</td>
+                  <td className="px-3 py-2">
+                    {g.grades.length === 3 ? (
+                      <span className="text-slate-600">전 학년</span>
+                    ) : (
+                      <span className="rounded bg-amber-50 px-1.5 text-amber-800">{g.grades.join('·')}학년</span>
+                    )}
+                  </td>
+                  {canManage && (
+                    <td className="space-x-2 whitespace-nowrap px-3 py-2">
+                      <button className="text-xs text-slate-700 underline" onClick={() => startEdit(g)}>
+                        수정
+                      </button>
+                      <button className="text-xs text-red-600 underline" onClick={() => remove(g)}>
+                        삭제
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ),
+            )}
             {groups.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-3 py-4 text-center text-xs text-slate-400">
@@ -257,6 +372,8 @@ export function SpecialDaysPage() {
           </tbody>
         </table>
       </div>
+
+      <AfterSchoolSection canManage={canManage} />
     </div>
   );
 }

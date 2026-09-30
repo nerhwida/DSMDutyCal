@@ -38,17 +38,56 @@ describe('특별 일정 등록 (F3)', () => {
     expect(titles).toContain('중간고사');
   });
 
-  it('학년부장은 특별 일정을 등록할 수 없다 (조회만 가능)', async () => {
-    const headId = await findTeacherId('1학년부장');
-    const agent = await loginAgent(headId, '1111');
-
-    const res = await agent
+  it('학년부장은 모든 학년의 특별 일정을 등록·수정·삭제할 수 있고, 일반 교사는 조회만 가능하다', async () => {
+    const head = await loginAgent(await findTeacherId('1학년부장'), '1111');
+    // 1학년 부장이 3학년 일정도 등록할 수 있다
+    const created = await head
       .post('/api/special-days')
-      .send({ date: '2026-11-01', type: 'EVENT', title: '체육대회' });
-    expect(res.status).toBe(403);
+      .send({ date: '2035-06-05', type: 'EVENT', title: '3학년 체험학습', grades: [3] });
+    expect(created.status).toBe(201);
 
-    const listRes = await agent.get('/api/special-days');
-    expect(listRes.status).toBe(200);
+    const edited = await head
+      .put('/api/special-days/group')
+      .send({ ids: [created.body[0].id], date: '2035-06-05', type: 'EXAM', title: '3학년 모의고사', grades: [3] });
+    expect(edited.status).toBe(200);
+    expect(edited.body[0]).toMatchObject({ grade: 3, type: 'EXAM', title: '3학년 모의고사' });
+
+    const teacher = await loginAgent(await findTeacherId('평교사'), '4444');
+    expect((await teacher.post('/api/special-days').send({ date: '2035-06-06', type: 'EVENT', title: 'x' })).status).toBe(403);
+    expect(
+      (await teacher.put('/api/special-days/group').send({ ids: [edited.body[0].id], date: '2035-06-05', type: 'EVENT', title: 'x' })).status,
+    ).toBe(403);
+    expect((await teacher.delete(`/api/special-days?ids=${edited.body[0].id}`)).status).toBe(403);
+    expect((await teacher.get('/api/special-days')).status).toBe(200);
+
+    expect((await head.delete(`/api/special-days?ids=${edited.body[0].id}`)).status).toBe(200);
+  });
+
+  it('묶음 수정: 날짜·제목·제외 학년을 바꾸고, 새로 제외되는 학년의 배정은 경고 후 삭제된다', async () => {
+    const admin = await loginAgent(await findTeacherId(process.env.ADMIN_NAME!), process.env.ADMIN_INITIAL_PIN!);
+    const teacherId = await findTeacherId('평교사');
+    const date = '2035-06-12';
+    const created = await admin.post('/api/special-days').send({ date, type: 'EVENT', title: '2학년 행사', grades: [2] });
+    const ids = created.body.map((d: { id: number }) => d.id);
+    const grade1 = await prisma.assignment.create({
+      data: { date, grade: 1, teacherId, originalTeacherId: teacherId, rotationGroup: 'WEEKDAY' },
+    });
+
+    // 1·2학년으로 넓히면 1학년 배정과 충돌 → 경고
+    const body = { ids, date, type: 'EVENT', title: '1·2학년 행사', grades: [1, 2] };
+    const warn = await admin.put('/api/special-days/group').send(body);
+    expect(warn.status).toBe(409);
+    expect(warn.body.conflictingCells).toEqual([`${date} 1학년`]);
+
+    const ok = await admin.put('/api/special-days/group').send({ ...body, confirmDeleteAssignments: true });
+    expect(ok.status).toBe(200);
+    expect(await prisma.assignment.findUnique({ where: { id: grade1.id } })).toBeNull();
+    const rows = await prisma.specialDay.findMany({ where: { date }, orderBy: { grade: 'asc' } });
+    expect(rows.map((r) => `${r.grade}:${r.title}`)).toEqual(['1:1·2학년 행사', '2:1·2학년 행사']);
+
+    // 다시 2학년만으로 좁히면 1학년은 운영일로 돌아온다
+    await admin.put('/api/special-days/group').send({ ...body, ids: rows.map((r) => r.id), grades: [2], title: '2학년 행사' });
+    expect((await prisma.specialDay.findMany({ where: { date } })).map((r) => r.grade)).toEqual([2]);
   });
 
   it('이미 배정이 있는 날짜에 등록하면 경고 후, 확인 시 배정이 삭제된다', async () => {
