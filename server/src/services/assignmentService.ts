@@ -53,7 +53,7 @@ async function evaluateTeachers(
   const [teachers, dayAssignments, afterSchoolDay] = await Promise.all([
     loadSchedulerTeachers(cell.date, cell.date, teacherIds),
     dayAssignmentsOf(db, cell.date, excludeIds),
-    db.afterSchoolDay.findUnique({ where: { date: cell.date } }),
+    db.afterSchoolDay.findUnique({ where: { date_grade: { date: cell.date, grade: cell.grade } } }),
   ]);
   const ctx = contextFor(cell.date, cell.grade, dayAssignments, afterSchoolDay !== null);
   return teachers.map((t) => {

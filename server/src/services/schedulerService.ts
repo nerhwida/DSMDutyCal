@@ -160,10 +160,13 @@ export async function loadSchedulerInput(
   };
 }
 
-/** [start, end] 기간의 방과후 운영일 목록. */
-export async function afterSchoolDaysBetween(start: string, end: string): Promise<string[]> {
-  const rows = await prisma.afterSchoolDay.findMany({ where: { date: { gte: start, lte: end } }, orderBy: { date: 'asc' } });
-  return rows.map((r) => r.date);
+/** [start, end] 기간의 방과후 운영일 (날짜 × 학년). */
+export async function afterSchoolDaysBetween(start: string, end: string): Promise<{ date: string; grade: number }[]> {
+  const rows = await prisma.afterSchoolDay.findMany({
+    where: { date: { gte: start, lte: end } },
+    orderBy: [{ date: 'asc' }, { grade: 'asc' }],
+  });
+  return rows.map((r) => ({ date: r.date, grade: r.grade }));
 }
 
 export interface GenerateResult {
@@ -552,7 +555,10 @@ export async function getMonthView(year: number, month: number, user: Authentica
         .map((date) => ({ date, grade: g.grade })),
     );
   const teachersForReasons = unassignedCells.length > 0 ? await loadSchedulerTeachers(start, end) : [];
-  const afterSchool = new Set(await afterSchoolDaysBetween(start, end));
+  const afterSchoolRows = await afterSchoolDaysBetween(start, end);
+  const afterSchool = new Set(afterSchoolRows.map((d) => `${d.date}:${d.grade}`));
+  const afterSchoolGrades = new Map<string, number[]>();
+  for (const d of afterSchoolRows) afterSchoolGrades.set(d.date, [...(afterSchoolGrades.get(d.date) ?? []), d.grade]);
   const unassigned = unassignedCells.map(({ date, grade }) => {
     const weekday = weekdayOf(date);
     const dayAssignments = new Map(
@@ -564,7 +570,7 @@ export async function getMonthView(year: number, month: number, user: Authentica
       grade,
       group: rotationGroupForWeekday(weekday),
       dayAssignments,
-      afterSchoolDay: afterSchool.has(date),
+      afterSchoolDay: afterSchool.has(`${date}:${grade}`),
     };
     return { date, grade, reasons: unassignedReasons(teachersForReasons, ctx) };
   });
@@ -591,8 +597,8 @@ export async function getMonthView(year: number, month: number, user: Authentica
       grades: operatingGradesOf(date),
     })),
     specialDays: specialDays.map((d) => ({ date: d.date, grade: d.grade, type: d.type, title: d.title })),
-    /** 방과후 운영일 (달력 표시용) */
-    afterSchoolDays: [...afterSchool],
+    /** 방과후 운영일 (달력 표시용): 날짜별 적용 학년 */
+    afterSchoolDays: [...afterSchoolGrades].map(([date, grades]) => ({ date, grades })),
     assignments: visible.map((a) => ({
       id: a.id,
       date: a.date,

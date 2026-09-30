@@ -111,7 +111,7 @@ describe('본인 감독 교체 권한 (6.5)', () => {
     await prisma.teacherWeekdayExclusion.create({
       data: { teacherId: b.id, weekday: weekdayOf(date), reason: 'AFTER_SCHOOL' },
     });
-    await prisma.afterSchoolDay.create({ data: { date } }); // 2/6은 방과후 운영일, 2/13은 미운영
+    await prisma.afterSchoolDay.create({ data: { date, grade: 1 } }); // 2/6은 1학년 방과후 운영일, 2/13은 미운영
     const x = await cell(date, 1, a.id);
 
     const preview = await a.agent.get(`/api/assignments/${x.id}/transfer-preview?toTeacherId=${b.id}`);

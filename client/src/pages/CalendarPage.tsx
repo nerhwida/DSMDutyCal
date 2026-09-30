@@ -36,6 +36,8 @@ const SPECIAL_STYLE: Record<SpecialDayType, string> = {
   OTHER: 'bg-slate-50 text-slate-600',
 };
 
+const gradesLabel = (grades: Grade[]) => (grades.length === 3 ? '전 학년' : `${grades.join('·')}학년`);
+
 const REST_DAY_TYPES: SpecialDayType[] = ['HOLIDAY', 'VACATION', 'SCHOOL_CLOSURE'];
 
 const STATUS_BADGE: Record<MonthPlanStatus, string> = {
@@ -126,7 +128,7 @@ export function CalendarPage() {
       assignments,
       unassigned,
       specials: groupBy(view?.specialDays ?? [], (d) => d.date),
-      afterSchool: new Set(view?.afterSchoolDays ?? []),
+      afterSchool: new Map((view?.afterSchoolDays ?? []).map((d) => [d.date, d.grades] as const)),
       operating: new Set(view?.operatingDays.map((d) => d.date)),
       grade: new Map(view?.grades.map((g) => [g.grade, g])),
     };
@@ -406,10 +408,10 @@ export function CalendarPage() {
                       </span>
                       {index.afterSchool.has(date) && (
                         <span
-                          title="방과후 운영일: 방과후 요일 교사는 이 날 감독에서 제외됩니다"
+                          title={`방과후 운영일: ${gradesLabel(index.afterSchool.get(date)!)} 감독에서 그날 방과후 수업이 있는 교사는 제외됩니다`}
                           className="rounded bg-teal-50 px-1 text-[11px] text-teal-700 print:hidden"
                         >
-                          방과후
+                          방과후{index.afterSchool.get(date)!.length < 3 && ` ${index.afterSchool.get(date)!.join('·')}`}
                         </span>
                       )}
                     </div>

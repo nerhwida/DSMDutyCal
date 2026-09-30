@@ -45,7 +45,7 @@ export function generateSchedule(input: SchedulerInput, rules: HardRule[] = DEFA
   const excluded = excludedGradesByDate(input.specialDays);
   const operating = new Set(days);
   const isOperating = (date: string, grade: number) => operating.has(date) && !excluded.get(date)?.has(grade);
-  const afterSchoolDays = new Set(input.afterSchoolDays);
+  const afterSchoolCells = new Set(input.afterSchoolDays.map((d) => `${d.date}:${d.grade}`));
   const rotationOrders = buildRotationOrders(input.teachers);
 
   const counts = new Map<string, number>();
@@ -89,7 +89,6 @@ export function generateSchedule(input: SchedulerInput, rules: HardRule[] = DEFA
     const weekday = weekdayOf(date);
     const group = rotationGroupForWeekday(weekday);
     const dayAssignments = new Map<number, number>(fixedByDate.get(date) ?? []);
-    const afterSchoolDay = afterSchoolDays.has(date);
 
     const inScope = scope === null || scope.has(date);
     const remaining = new Set<Grade>(
@@ -100,6 +99,7 @@ export function generateSchedule(input: SchedulerInput, rules: HardRule[] = DEFA
       // 후보 수가 적은 학년부터 (6.4-2). 배정할 때마다 다시 계산한다.
       let chosen: { grade: Grade; ctx: ScheduleContext; candidates: SchedulerTeacher[] } | null = null;
       for (const grade of [...remaining].sort((a, b) => a - b)) {
+        const afterSchoolDay = afterSchoolCells.has(`${date}:${grade}`);
         const ctx: ScheduleContext = { date, weekday, grade, group, dayAssignments, afterSchoolDay };
         const candidates = input.teachers.filter((t) => firstViolation(t, ctx, rules) === null);
         if (chosen === null || candidates.length < chosen.candidates.length) {

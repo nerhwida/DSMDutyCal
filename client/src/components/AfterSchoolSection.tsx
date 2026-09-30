@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 import { weekdayOf } from '../lib/date';
+import type { Grade } from '../types';
+import { GradeChecks, gradesLabel } from './GradeChecks';
+
+const GRADES: Grade[] = [1, 2, 3];
 
 /** 연속된 평일(금→월 포함)을 구간으로 묶어 '3/3~3/7, 3/10' 형태로 보여 준다. */
 function toRanges(dates: string[]): string[] {
@@ -27,19 +31,20 @@ function toRanges(dates: string[]): string[] {
 }
 
 /**
- * 방과후 운영일 (학교 전체). 교사의 방과후 요일은 여기 등록된 날에만 감독에서 제외된다.
- * 관리자·학년부장이 기간 단위로 추가·제외한다.
+ * 방과후 운영일 (날짜 × 학년). 방과후 시간에 자습하는 학년을 지정하면, 그 학년 감독에서만
+ * 그날 방과후 수업이 있는 교사(방과후 요일)가 제외된다. 관리자·학년부장이 기간 단위로 추가·제외한다.
  */
 export function AfterSchoolSection({ canManage }: { canManage: boolean }) {
-  const [dates, setDates] = useState<string[]>([]);
+  const [days, setDays] = useState<{ date: string; grades: Grade[] }[]>([]);
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
+  const [grades, setGrades] = useState<Grade[]>([...GRADES]);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      setDates(await api.get<string[]>('/api/after-school-days'));
+      setDays(await api.get<{ date: string; grades: Grade[] }[]>('/api/after-school-days'));
     } catch (err) {
       setError(err instanceof Error ? err.message : '방과후 운영일을 불러오지 못했습니다.');
     }
@@ -49,25 +54,32 @@ export function AfterSchoolSection({ canManage }: { canManage: boolean }) {
     load();
   }, [load]);
 
+  // 월별 → 적용 학년별 날짜 목록
   const byMonth = useMemo(() => {
-    const map = new Map<string, string[]>();
-    for (const d of dates) {
-      const key = d.slice(0, 7);
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(d);
+    const map = new Map<string, Map<string, { grades: Grade[]; dates: string[] }>>();
+    for (const d of days) {
+      const month = d.date.slice(0, 7);
+      if (!map.has(month)) map.set(month, new Map());
+      const byGrades = map.get(month)!;
+      const key = d.grades.join();
+      if (!byGrades.has(key)) byGrades.set(key, { grades: d.grades, dates: [] });
+      byGrades.get(key)!.dates.push(d.date);
     }
-    return [...map.entries()];
-  }, [dates]);
+    return [...map.entries()].map(([month, byGrades]) => [month, [...byGrades.values()]] as const);
+  }, [days]);
 
   async function add() {
     setError(null);
     setMessage(null);
     try {
-      const res = await api.post<{ added: number; alreadyRegistered: number }>('/api/after-school-days', {
+      const res = await api.post<{ days: number; added: number; alreadyRegistered: number }>('/api/after-school-days', {
         startDate: start,
         endDate: end || start,
+        grades,
       });
-      setMessage(`운영일 ${res.added}일을 추가했습니다.${res.alreadyRegistered ? ` (이미 등록 ${res.alreadyRegistered}일)` : ''}`);
+      setMessage(
+        `평일 ${res.days}일 × ${gradesLabel(grades)}을 운영일로 추가했습니다.${res.alreadyRegistered ? ` (이미 등록된 ${res.alreadyRegistered}건 제외)` : ''}`,
+      );
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : '추가에 실패했습니다.');
@@ -78,8 +90,10 @@ export function AfterSchoolSection({ canManage }: { canManage: boolean }) {
     setError(null);
     setMessage(null);
     try {
-      const res = await api.delete<{ removed: number }>(`/api/after-school-days?from=${start}&to=${end || start}`);
-      setMessage(`운영일 ${res.removed}일을 제외했습니다.`);
+      const res = await api.delete<{ removed: number }>(
+        `/api/after-school-days?from=${start}&to=${end || start}&grades=${grades.join(',')}`,
+      );
+      setMessage(`${gradesLabel(grades)} 운영일 ${res.removed}건을 제외했습니다.`);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : '제외에 실패했습니다.');
@@ -91,8 +105,9 @@ export function AfterSchoolSection({ canManage }: { canManage: boolean }) {
       <div>
         <h3 className="text-sm font-semibold text-slate-700">방과후 운영일</h3>
         <p className="mt-1 text-xs text-slate-500">
-          방과후 수업이 열리는 날입니다. 교사에게 지정된 <b>방과후 요일</b>은 이 운영일에 해당하는 날에만 감독에서 제외되고,
-          운영하지 않는 날(시험 기간 등)에는 감독에 배정될 수 있습니다. 기간을 넣으면 그 안의 평일(월~금)이 모두 처리됩니다.
+          방과후 수업이 열리는 날과, 방과후 시간에 자습하는 학년을 지정합니다. 체크한 학년의 감독은 그날 방과후 수업이 없는
+          교사가 맡습니다(교사에게 지정된 <b>방과후 요일</b>이면 제외). 체크하지 않은 학년과 운영하지 않는 날(시험 기간 등)에는
+          방과후 교사도 감독에 배정될 수 있습니다. 기간을 넣으면 그 안의 평일(월~금)이 모두 처리됩니다.
         </p>
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -108,12 +123,18 @@ export function AfterSchoolSection({ canManage }: { canManage: boolean }) {
             <label className="block text-xs text-slate-500">종료일 (미입력 시 하루)</label>
             <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="rounded border border-slate-300 px-2 py-1 text-sm" />
           </div>
-          <button onClick={add} disabled={!start} className="rounded bg-slate-800 px-3 py-1.5 text-sm text-white disabled:opacity-40">
+          <div>
+            <label className="block text-xs text-slate-500">적용 학년 (방과후 교사 감독 제외)</label>
+            <div className="flex h-[30px] items-center">
+              <GradeChecks value={grades} onChange={setGrades} />
+            </div>
+          </div>
+          <button onClick={add} disabled={!start || grades.length === 0} className="rounded bg-slate-800 px-3 py-1.5 text-sm text-white disabled:opacity-40">
             운영일 추가
           </button>
           <button
             onClick={remove}
-            disabled={!start}
+            disabled={!start || grades.length === 0}
             className="rounded border border-slate-400 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-40"
           >
             운영일에서 제외
@@ -122,13 +143,24 @@ export function AfterSchoolSection({ canManage }: { canManage: boolean }) {
       )}
 
       <ul className="divide-y divide-slate-100 rounded border border-slate-200 text-sm">
-        {byMonth.map(([month, list]) => (
+        {byMonth.map(([month, groups]) => (
           <li key={month} className="flex gap-3 px-3 py-1.5">
             <span className="w-24 shrink-0 text-slate-600">
               {Number(month.slice(0, 4))}년 {Number(month.slice(5, 7))}월
             </span>
-            <span className="text-slate-800">{toRanges(list).join(', ')}</span>
-            <span className="ml-auto shrink-0 text-xs text-slate-400">{list.length}일</span>
+            <div className="space-y-0.5">
+              {groups.map((g) => (
+                <p key={g.grades.join()}>
+                  <span className={g.grades.length === 3 ? 'text-slate-500' : 'rounded bg-teal-50 px-1.5 text-teal-700'}>
+                    {gradesLabel(g.grades)}
+                  </span>{' '}
+                  <span className="text-slate-800">{toRanges(g.dates).join(', ')}</span>
+                </p>
+              ))}
+            </div>
+            <span className="ml-auto shrink-0 text-xs text-slate-400">
+              {new Set(groups.flatMap((g) => g.dates)).size}일
+            </span>
           </li>
         ))}
         {byMonth.length === 0 && (
