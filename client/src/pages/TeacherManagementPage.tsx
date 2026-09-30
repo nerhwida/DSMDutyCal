@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
-import type { Grade, GradeHeadRef, Teacher } from '../types';
+import type { Grade, GradeHeadRef, MonthStats, Teacher } from '../types';
+import { todayInSeoul } from '../lib/date';
 import { WEEKDAY_LABEL } from '../types';
 import { OrderList } from '../components/OrderList';
 
@@ -12,6 +13,8 @@ export function TeacherManagementPage() {
   const { user } = useAuth();
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [gradeHeads, setGradeHeads] = useState<GradeHeadRef[]>([]);
+  // 교사별 학년·그룹 누계 (이번 달까지 확정분 + 초기 누계). 순환 순서 목록 정렬에 쓴다.
+  const [totals, setTotals] = useState<Map<number, Record<string, number>>>(new Map());
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
@@ -21,12 +24,15 @@ export function TeacherManagementPage() {
 
   const load = useCallback(async () => {
     try {
-      const [t, gh] = await Promise.all([
+      const today = todayInSeoul();
+      const [t, gh, stats] = await Promise.all([
         api.get<Teacher[]>('/api/teachers'),
         api.get<{ grade: Grade; teacherId: number }[]>('/api/grade-heads'),
+        api.get<MonthStats>(`/api/stats?year=${Number(today.slice(0, 4))}&month=${Number(today.slice(5, 7))}`),
       ]);
       setTeachers(t);
       setGradeHeads(gh);
+      setTotals(new Map(stats.rows.map((r) => [r.teacherId, r.byGradeGroup])));
     } catch (err) {
       setError(err instanceof Error ? err.message : '목록을 불러오지 못했습니다.');
     }
@@ -358,13 +364,18 @@ export function TeacherManagementPage() {
 
       {scopeGrades.length > 0 && (
         <div>
-          <h3 className="mb-2 text-sm font-semibold text-slate-800">학년별 순환 순서 (드래그로 변경)</h3>
+          <h3 className="mb-1 text-sm font-semibold text-slate-800">학년별 순환 순서 (드래그로 변경)</h3>
+          <p className="mb-2 text-xs text-slate-500">
+            자동 편성은 이 순서대로 돌아가며 배정합니다(그날 감독이 불가한 교사는 건너뜀). 오른쪽 숫자는 참고용 누계입니다
+            (초기 누계 + 이번 달까지 확정·마감된 해당 학년·그룹 감독).
+          </p>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             {scopeGrades.map((g) => (
               <GradeOrderPanel
                 key={g}
                 grade={g}
                 teachers={teachers}
+                totals={totals}
                 onReorder={(group, ids) => reorder(g, group, ids)}
               />
             ))}
@@ -378,30 +389,31 @@ export function TeacherManagementPage() {
 function GradeOrderPanel({
   grade,
   teachers,
+  totals,
   onReorder,
 }: {
   grade: Grade;
   teachers: Teacher[];
+  totals: Map<number, Record<string, number>>;
   onReorder: (group: 'WEEKDAY' | 'FRIDAY', teacherIds: number[]) => void;
 }) {
-  const weekdayList = useMemo(
-    () =>
+  // 저장된 순번 순 (자동 편성이 이 순서대로 배정한다). 누계는 참고용으로 표시한다.
+  const listOf = useCallback(
+    (group: 'WEEKDAY' | 'FRIDAY') =>
       teachers
-        .map((t) => ({ t, tg: t.teacherGrades.find((g) => g.grade === grade && g.canWeekday) }))
+        .map((t) => ({ t, tg: t.teacherGrades.find((g) => g.grade === grade && (group === 'WEEKDAY' ? g.canWeekday : g.canFriday)) }))
         .filter((x) => x.tg)
-        .sort((a, b) => a.tg!.weekdayOrder - b.tg!.weekdayOrder)
-        .map((x) => ({ teacherId: x.t.id, name: x.t.name })),
-    [teachers, grade],
+        .map((x) => ({
+          teacherId: x.t.id,
+          name: x.t.name,
+          total: totals.get(x.t.id)?.[`${grade}:${group}`] ?? 0,
+          order: group === 'WEEKDAY' ? x.tg!.weekdayOrder : x.tg!.fridayOrder,
+        }))
+        .sort((a, b) => a.order - b.order),
+    [teachers, totals, grade],
   );
-  const fridayList = useMemo(
-    () =>
-      teachers
-        .map((t) => ({ t, tg: t.teacherGrades.find((g) => g.grade === grade && g.canFriday) }))
-        .filter((x) => x.tg)
-        .sort((a, b) => a.tg!.fridayOrder - b.tg!.fridayOrder)
-        .map((x) => ({ teacherId: x.t.id, name: x.t.name })),
-    [teachers, grade],
-  );
+  const weekdayList = useMemo(() => listOf('WEEKDAY'), [listOf]);
+  const fridayList = useMemo(() => listOf('FRIDAY'), [listOf]);
 
   return (
     <div className="rounded border border-slate-200 bg-white p-3">

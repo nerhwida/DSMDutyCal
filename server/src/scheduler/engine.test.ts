@@ -203,28 +203,44 @@ describe('Scheduler Engine (6.5)', () => {
     }
   });
 
-  it('초기 누계가 적은 교사가 우선 배정된다', () => {
+  it('순번 우선: 누계와 관계없이 드래그로 정한 순환 순서대로 배정한다', () => {
     const teachers = Array.from({ length: 4 }, () => teacher([1]));
     const [a, b, c, d] = teachers;
+    // 드래그로 정한 순서: d → b → a → c (누계는 d가 가장 많음)
+    const order = [d, b, a, c];
+    order.forEach((t, i) => (t.grades[0].weekdayOrder = i + 1));
+
     const result = generateSchedule(
       baseInput(teachers, {
         targetGrades: [1],
-        // d가 누계가 가장 적고, 순번은 가장 뒤
         priorCounts: [
-          { teacherId: a.id, grade: 1, group: 'WEEKDAY', count: 5 },
-          { teacherId: b.id, grade: 1, group: 'WEEKDAY', count: 5 },
-          { teacherId: c.id, grade: 1, group: 'WEEKDAY', count: 5 },
-          { teacherId: d.id, grade: 1, group: 'WEEKDAY', count: 2 },
+          { teacherId: a.id, grade: 1, group: 'WEEKDAY', count: 0 },
+          { teacherId: b.id, grade: 1, group: 'WEEKDAY', count: 0 },
+          { teacherId: c.id, grade: 1, group: 'WEEKDAY', count: 0 },
+          { teacherId: d.id, grade: 1, group: 'WEEKDAY', count: 9 },
         ],
       }),
     );
 
     const weekday = result.assignments.filter((x) => x.group === 'WEEKDAY').map((x) => x.teacherId);
-    // 누계 차이(3)만큼 d가 먼저 연속 배정된다.
-    expect(weekday.slice(0, 3)).toEqual([d.id, d.id, d.id]);
-    // 이후 누계 합계가 균등해진다.
-    const stat = result.fairness.find((s) => s.grade === 1 && s.group === 'WEEKDAY')!;
-    expect(stat.totalDeviation).toBeLessThanOrEqual(1);
+    // 월~목 운영일마다 d → b → a → c 순서로 돈다
+    expect(weekday.slice(0, 4)).toEqual([d.id, b.id, a.id, c.id]);
+    // 누계가 많은 d도 자기 순번마다 배정된다 (4명 순환)
+    expect(weekday.slice(4, 8)).toEqual([d.id, b.id, a.id, c.id]);
+  });
+
+  it('순번 우선: 불가 교사는 건너뛰고 다음 순번 교사가 맡으며, 순환은 이어진다', () => {
+    const teachers = Array.from({ length: 3 }, () => teacher([1]));
+    const [a, b, c] = teachers;
+    b.unavailableDates = [{ date: '2026-10-05', reason: '출장' }];
+    // 10/1(목) a, 10/5(월) b 출장 → c, 10/6(화) 포인터가 c 다음이므로 a
+    const result = generateSchedule(baseInput(teachers, { targetGrades: [1] }));
+    const weekday = result.assignments.filter((x) => x.group === 'WEEKDAY');
+    expect(weekday.slice(0, 3).map((x) => [x.date, x.teacherId])).toEqual([
+      ['2026-10-01', a.id],
+      ['2026-10-05', c.id],
+      ['2026-10-06', a.id],
+    ]);
   });
 
   it('수동 변경 셀은 재편성 후에도 유지된다', () => {
