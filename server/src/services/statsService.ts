@@ -120,6 +120,11 @@ export async function getMonthStats(year: number, month: number, user: Authentic
         teacherId: t.id,
         name: t.name,
         active: t.active,
+        /** 감독 가능 학년 (현황 패널에서 학년별로 묶을 때 사용) */
+        grades: t.teacherGrades
+          .filter((g) => g.canWeekday || g.canFriday)
+          .map((g) => g.grade)
+          .sort((a, b) => a - b),
         month,
         monthTotal: month[1] + month[2] + month[3],
         weekdayTotal,

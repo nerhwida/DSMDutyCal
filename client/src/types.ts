@@ -201,6 +201,8 @@ export interface StatsRow {
   teacherId: number;
   name: string;
   active: boolean;
+  /** 감독 가능 학년 */
+  grades: Grade[];
   month: Record<Grade, number>;
   monthTotal: number;
   weekdayTotal: number;
