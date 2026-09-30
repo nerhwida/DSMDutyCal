@@ -144,6 +144,8 @@ export interface Candidate {
   monthCount: number;
   /** 교사의 담당 학년 (목록을 학년별로 묶을 때 사용) */
   grades: Grade[];
+  /** 관리자 계정 (본인 교체 목록에서 뺀다) */
+  isAdmin: boolean;
 }
 
 export interface CellCandidatesResponse {

@@ -153,7 +153,9 @@ export async function getCandidates(assignmentId: number, user: AuthenticatedUse
 
 /** 셀(date, grade)에 대한 전체 활성 교사 평가 + 이번 달 해당 학년·그룹 감독 횟수 (선택 참고용). */
 async function evaluateActiveTeachers(cell: { date: string; grade: number }, excludeIds: number[]) {
-  const activeIds = (await prisma.teacher.findMany({ where: { active: true }, select: { id: true } })).map((t) => t.id);
+  const active = await prisma.teacher.findMany({ where: { active: true }, select: { id: true, isAdmin: true } });
+  const activeIds = active.map((t) => t.id);
+  const adminIds = new Set(active.filter((t) => t.isAdmin).map((t) => t.id));
   const evaluations = await evaluateTeachers(prisma, cell, excludeIds, activeIds);
 
   const group = rotationGroupForWeekday(weekdayOf(cell.date));
@@ -168,7 +170,12 @@ async function evaluateActiveTeachers(cell: { date: string; grade: number }, exc
   const teacherGrades = await prisma.teacherGrade.findMany({ where: { teacherId: { in: activeIds } }, orderBy: { grade: 'asc' } });
   const gradesOf = new Map<number, number[]>();
   for (const tg of teacherGrades) gradesOf.set(tg.teacherId, [...(gradesOf.get(tg.teacherId) ?? []), tg.grade]);
-  return evaluations.map((e) => ({ ...e, grades: gradesOf.get(e.teacherId) ?? [], monthCount: monthCount.get(e.teacherId) ?? 0 }));
+  return evaluations.map((e) => ({
+    ...e,
+    isAdmin: adminIds.has(e.teacherId),
+    grades: gradesOf.get(e.teacherId) ?? [],
+    monthCount: monthCount.get(e.teacherId) ?? 0,
+  }));
 }
 
 /**
