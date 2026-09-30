@@ -207,8 +207,7 @@ REQUIREMENTS.md의 데이터 모델(§4)에는 `Teacher.sortOrder` 하나만 있
     - **OnePerDay는 강제로도 풀 수 없다** (한 교사의 같은 날 이중 배정은 물리적으로 불가하다는 결정).
     - `isModified` = `teacherId !== originalTeacherId`이므로, 되돌리면 표시가 풀리고 이력은 남는다.
     - **ADMIN의 관리 변경은 초기 배정**이다 (오너 결정): `originalTeacherId`도 새 교사로 바꿔 `isModified=false`,
-      이력 메모 `[관리자 지정]`. 표시가 없으면 부분 재편성이 덮어쓰므로 `isLocked=true`로 고정한다.
-      학년부장 변경은 기존대로 교체 표시.
+      이력 메모 `[관리자 지정]`. 학년부장 변경은 기존대로 교체 표시.
   - **알림:**
     - 넘기기·맞교환은 상대 교사와 실제 `GradeHead` 행의 부장에게 보낸다. 암묵적 부장인 ADMIN에게는
       보내지 않는다.
@@ -224,8 +223,8 @@ REQUIREMENTS.md의 데이터 모델(§4)에는 `Teacher.sortOrder` 하나만 있
   - 조건: 담당 학년 권한, DRAFT/CONFIRMED만, 운영일이어야 하고 셀이 비어 있어야 한다.
   - 차단 규칙은 강제로 풀 수 없고, 경고는 `force`가 필요하다.
   - `originalTeacherId` = 지정한 교사이므로 변경 셀로 표시되지 않는다.
-  - `lock`은 기본 **true**다. 셀이 `isModified`가 아니라서, 고정하지 않으면 이후 부분 재편성이 직접
-    지정한 교사를 덮어쓴다.
+  - **고정(🔒) 기능은 없다** (오너 결정으로 제거, 마이그레이션 `remove_assignment_lock`). 직접 지정·ADMIN 변경
+    셀은 `isModified`가 아니므로 이후 자동 편성·부분 재편성이 덮어쓸 수 있다.
   - 이력은 `fromTeacherId = null`로 남긴다.
     - `AssignmentHistory.fromTeacherId`는 마이그레이션 `history_nullable_from`부터 nullable이다.
     - UI는 null을 "미배정"으로 표시하고, '내 감독' 이력에서는 종류 `ASSIGNED`로 보여 준다.
@@ -235,7 +234,7 @@ REQUIREMENTS.md의 데이터 모델(§4)에는 `Teacher.sortOrder` 하나만 있
 
 ### Phase 5 세부 사항
 - **부분 재편성** (`regenerateMonthPlan`, `POST …/regenerate {from, to, includeModified}`)
-  - 고정 셀은 항상 유지하고, 수동 변경 셀은 `includeModified`가 아니면 유지한다.
+  - 수동 변경 셀은 `includeModified`가 아니면 유지한다.
   - **DRAFT 월:** 결과로 셀을 그대로 교체한다 (`originalTeacherId` = 새 교사, 이력 없음).
   - **CONFIRMED 월 (오너 결정 "B안"):**
     - `originalTeacherId`를 확정 시점 교사로 유지하므로, 바뀐 셀은 노란색(`isModified`)이 된다.
@@ -244,6 +243,9 @@ REQUIREMENTS.md의 데이터 모델(§4)에는 `Teacher.sortOrder` 하나만 있
     - 미배정이던 셀을 채우면 original = 새 교사로 두고 `fromTeacherId = null` 이력을 남긴다.
   - **부작용:** 재편성된 확정 셀은 `isModified`가 되므로, *다음* 재편성에서는 `includeModified`가
     아니면 보호된다. 범례가 "수동 변경" 대신 "↻ 변경됨"인 이유다.
+- **감독 초기화** (`resetMonthPlan`, `POST …/reset`): 해당 월·학년 배정과 그 이력을 모두 지우고 MonthPlan을
+  EMPTY로 되돌린다. DRAFT·CONFIRMED만(마감 월 409), 권한은 학년 범위. 확정 월이면 배정되어 있던 교사(실행자
+  제외)에게 `MONTH_RESET` 알림. 순환 포인터는 확정 배정 기준이라 자연히 이전 상태로 돌아간다.
 - **마감·해제 (F8)**
   - 마감은 CONFIRMED여야 하고 학년 범위 권한이 필요하다.
   - 해제는 ADMIN 전용이다. 본문 `{pin}`을 ADMIN 본인 PIN으로 다시 확인하고, 월을 CONFIRMED로
