@@ -206,6 +206,9 @@ REQUIREMENTS.md의 데이터 모델(§4)에는 `Teacher.sortOrder` 하나만 있
     - 경고가 있으면 `force: true`가 필요하다 (없으면 409 `{ requiresForce }`).
     - **OnePerDay는 강제로도 풀 수 없다** (한 교사의 같은 날 이중 배정은 물리적으로 불가하다는 결정).
     - `isModified` = `teacherId !== originalTeacherId`이므로, 되돌리면 표시가 풀리고 이력은 남는다.
+    - **ADMIN의 관리 변경은 초기 배정**이다 (오너 결정): `originalTeacherId`도 새 교사로 바꿔 `isModified=false`,
+      이력 메모 `[관리자 지정]`. 표시가 없으면 부분 재편성이 덮어쓰므로 `isLocked=true`로 고정한다.
+      학년부장 변경은 기존대로 교체 표시.
   - **알림:**
     - 넘기기·맞교환은 상대 교사와 실제 `GradeHead` 행의 부장에게 보낸다. 암묵적 부장인 ADMIN에게는
       보내지 않는다.
