@@ -372,7 +372,7 @@ export function CalendarPage() {
       <div className="flex items-start gap-4">
         {/* 달력 그리드 (직접 구현) */}
         <div className="flex-1 overflow-hidden rounded border border-slate-200 bg-white print:rounded-none print:border-slate-400">
-          <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-center text-sm font-medium print:text-xs">
+          <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-center text-base font-medium print:text-xs">
             {WEEK_HEADER.map((w, i) => (
               <div key={w} className={`py-1.5 ${i === 0 ? 'text-red-500' : i === 6 ? 'text-blue-500' : 'text-slate-600'}`}>
                 {w}
@@ -382,7 +382,7 @@ export function CalendarPage() {
           {monthGrid(ym.year, ym.month).map((week, wi) => (
             <div key={wi} className="grid grid-cols-7 border-b border-slate-100 last:border-b-0">
               {week.map((date, di) => {
-                if (!date) return <div key={di} className="min-h-[112px] border-r border-slate-100 bg-slate-50/50 last:border-r-0 print:min-h-[64px]" />;
+                if (!date) return <div key={di} className="min-h-[128px] border-r border-slate-100 bg-slate-50/50 last:border-r-0 print:min-h-[64px]" />;
                 const weekday = weekdayOf(date);
                 const weekend = weekday === 0 || weekday === 6;
                 // 특별 일정은 학년 단위: 전 학년이면 셀 상단 라벨, 일부 학년이면 해당 학년 줄에 표시
@@ -396,11 +396,11 @@ export function CalendarPage() {
                 return (
                   <div
                     key={date}
-                    className={`min-h-[112px] border-r border-slate-100 p-1 last:border-r-0 print:min-h-[64px] ${grayed ? 'bg-slate-100' : ''}`}
+                    className={`min-h-[128px] border-r border-slate-100 p-1 last:border-r-0 print:min-h-[64px] ${grayed ? 'bg-slate-100' : ''}`}
                   >
                     <div className="mb-0.5 flex items-center gap-1">
                       <span
-                        className={`text-sm print:text-xs ${
+                        className={`text-base print:text-xs ${
                           date === today ? 'rounded-full bg-slate-800 px-1.5 text-white' : weekday === 0 || holiday ? 'text-red-500' : weekday === 6 ? 'text-blue-500' : 'text-slate-500'
                         }`}
                       >
@@ -409,7 +409,7 @@ export function CalendarPage() {
                       {index.afterSchool.has(date) && (
                         <span
                           title={`방과후 운영일: ${gradesLabel(index.afterSchool.get(date)!)} 감독에서 그날 방과후 수업이 있는 교사는 제외됩니다`}
-                          className="rounded bg-teal-50 px-1 text-[11px] text-teal-700 print:hidden"
+                          className="rounded bg-teal-50 px-1 text-xs text-teal-700 print:hidden"
                         >
                           방과후{index.afterSchool.get(date)!.length < 3 && ` ${index.afterSchool.get(date)!.join('·')}`}
                         </span>
@@ -418,7 +418,7 @@ export function CalendarPage() {
 
                     {fullDay &&
                       groupSpecials(specials).map((s) => (
-                        <div key={`${s.type}-${s.title}`} className={`rounded px-1 py-0.5 text-xs print:text-[11px] ${SPECIAL_STYLE[s.type]}`}>
+                        <div key={`${s.type}-${s.title}`} className={`rounded px-1 py-0.5 text-sm print:text-[11px] ${SPECIAL_STYLE[s.type]}`}>
                           <p className="font-medium">
                             {s.grades.length < 3 && <span className="mr-1 opacity-70">{s.grades.join('·')}학년</span>}
                             {s.title}
@@ -437,7 +437,7 @@ export function CalendarPage() {
                           const big = gradeFilter !== null;
                           // 화면은 크게, 인쇄는 A4 가로 1페이지에 맞도록 기존 크기 유지
                           const base = `flex w-full items-center gap-1 rounded px-1 text-left ${
-                            big ? 'py-1 text-base print:text-sm' : 'text-sm print:text-xs'
+                            big ? 'py-1 text-lg print:text-sm' : 'text-base print:text-xs'
                           }`;
 
                           const gradeSpecial = specials.find((s) => s.grade === g);
@@ -479,7 +479,7 @@ export function CalendarPage() {
                                 }
                                 className={`${base} border border-red-500 text-red-600 hover:bg-red-50`}
                               >
-                                <span className="w-3">{g}</span>미배정 <span className="text-[11px] print:hidden">+ 지정</span>
+                                <span className="w-3">{g}</span>미배정 <span className="text-xs print:hidden">+ 지정</span>
                               </button>
                             ) : (
                               <div key={g} title={reasons?.join('\n')} className={`${base} border border-red-500 text-red-600`}>
