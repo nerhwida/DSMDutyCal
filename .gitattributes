@@ -9,3 +9,5 @@
 *.jpg binary
 *.ico binary
 *.db binary
+
+*.sh text eol=lf
