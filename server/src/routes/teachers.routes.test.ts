@@ -12,6 +12,19 @@ async function loginAgent(teacherId: number, pin: string) {
   return agent;
 }
 
+describe('GET /api/teachers 정렬', () => {
+  it('관리자가 맨 앞이고 나머지는 이름 오름차순이다', async () => {
+    const agent = await loginAgent(await findTeacherId('평교사'), '4444');
+    const res = await agent.get('/api/teachers');
+    const list = res.body as { name: string; isAdmin: boolean }[];
+    const firstNonAdmin = list.findIndex((t) => !t.isAdmin);
+    expect(list[0].isAdmin).toBe(true);
+    expect(list.slice(firstNonAdmin).every((t) => !t.isAdmin)).toBe(true);
+    const names = list.slice(firstNonAdmin).map((t) => t.name);
+    expect(names).toEqual([...names].sort());
+  });
+});
+
 describe('교사 학년·방과후·금요일 설정', () => {
   it('학년부장은 담당 학년의 감독 가능 여부를 저장/재조회할 수 있다', async () => {
     const headId = await findTeacherId('2학년부장');

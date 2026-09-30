@@ -21,7 +21,8 @@ teachersRouter.use(requireAuth);
 /** GET /api/teachers — 교사 관리 화면용 전체 목록 (활성/비활성 포함, 로그인만 하면 조회 가능). */
 teachersRouter.get('/', async (_req, res) => {
   const teachers = await prisma.teacher.findMany({
-    orderBy: { sortOrder: 'asc' },
+    // 관리자가 맨 앞, 나머지는 이름 오름차순.
+    orderBy: [{ isAdmin: 'desc' }, { name: 'asc' }, { id: 'asc' }],
     include: {
       teacherGrades: true,
       weekdayExclusions: true,
