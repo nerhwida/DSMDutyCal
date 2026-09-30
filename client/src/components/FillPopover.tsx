@@ -12,12 +12,11 @@ interface FillPopoverProps {
   onCancel: () => void;
 }
 
-/** 미배정 칸 직접 지정 (학년부장·ADMIN). 관리 변경(F6)과 같은 선택 규칙 + 고정 옵션(기본 켬). */
+/** 미배정 칸 직접 지정 (학년부장·ADMIN). 관리 변경(F6)과 같은 선택 규칙. */
 export function FillPopover({ date, grade, reasons, onDone, onCancel }: FillPopoverProps) {
   const [data, setData] = useState<CellCandidatesResponse | null>(null);
   const [teacherId, setTeacherId] = useState<number | null>(null);
   const [force, setForce] = useState(false);
-  const [lock, setLock] = useState(true);
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -41,7 +40,6 @@ export function FillPopover({ date, grade, reasons, onDone, onCancel }: FillPopo
         date,
         grade,
         teacherId: selected.teacherId,
-        lock,
         force: force || undefined,
         note: note || undefined,
       });
@@ -107,10 +105,6 @@ export function FillPopover({ date, grade, reasons, onDone, onCancel }: FillPopo
       )}
 
       <div className="space-y-1 text-xs text-slate-600">
-        <label className="flex items-center gap-1">
-          <input type="checkbox" checked={lock} onChange={(e) => setLock(e.target.checked)} />
-          고정 🔒 (부분 재편성에서 바뀌지 않도록)
-        </label>
         <label className="flex items-center gap-1">
           <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} />
           강제 배정 (불가 사유가 있어도 선택 가능, 같은 날 다른 학년 감독 중인 교사는 제외)

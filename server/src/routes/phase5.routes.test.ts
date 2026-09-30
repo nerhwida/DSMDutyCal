@@ -41,7 +41,7 @@ async function setPlan(year: number, month: number, grade: number, status: 'DRAF
   });
 }
 
-function cell(date: string, grade: number, teacherId: number, extra: { originalTeacherId?: number; isLocked?: boolean; isModified?: boolean } = {}) {
+function cell(date: string, grade: number, teacherId: number, extra: { originalTeacherId?: number; isModified?: boolean } = {}) {
   return prisma.assignment.create({
     data: {
       date,
@@ -49,7 +49,6 @@ function cell(date: string, grade: number, teacherId: number, extra: { originalT
       teacherId,
       originalTeacherId: extra.originalTeacherId ?? teacherId,
       rotationGroup: rotationGroupForWeekday(weekdayOf(date)),
-      isLocked: extra.isLocked ?? false,
       isModified: extra.isModified ?? false,
     },
   });
@@ -58,7 +57,7 @@ function cell(date: string, grade: number, teacherId: number, extra: { originalT
 const reload = (id: number) => prisma.assignment.findUniqueOrThrow({ where: { id } });
 
 describe('월 마감 (F8)', () => {
-  it('마감된 월은 재편성·셀 변경·고정·본인 교체·특별 일정 등록이 모두 차단된다 (Phase 5 완료 기준)', async () => {
+  it('마감된 월은 재편성·셀 변경·본인 교체·특별 일정 등록이 모두 차단된다 (Phase 5 완료 기준)', async () => {
     const a = await newTeacher('마감A');
     const b = await newTeacher('마감B');
     await setPlan(2033, 2, 1, 'CONFIRMED');
@@ -73,7 +72,6 @@ describe('월 마감 (F8)', () => {
     expect((await head1.post('/api/months/2033/2/grades/1/generate')).status).toBe(409);
     expect((await head1.post('/api/months/2033/2/grades/1/regenerate').send({ from: '2033-02-01', to: '2033-02-01' })).status).toBe(409);
     expect((await head1.put(`/api/assignments/${x.id}`).send({ teacherId: b.id })).status).toBe(409);
-    expect((await head1.put(`/api/assignments/${x.id}/lock`).send({ locked: true })).status).toBe(409);
     expect((await a.agent.post(`/api/assignments/${x.id}/transfer`).send({ toTeacherId: b.id, confirmWarnings: true })).status).toBe(409);
 
     const admin = await adminAgent();
@@ -85,7 +83,6 @@ describe('월 마감 (F8)', () => {
 
     const after = await reload(x.id);
     expect(after.teacherId).toBe(a.id);
-    expect(after.isLocked).toBe(false);
   });
 
   it('확정되지 않은 월은 마감할 수 없다', async () => {
@@ -128,7 +125,7 @@ describe('부분 재편성 (F4)', () => {
     for (const date of busy) await prisma.teacherUnavailableDate.create({ data: { teacherId: a.id, date, reason: '출장' } });
 
     const x = await cell('2033-03-01', 1, a.id); // 범위 안, A 출장 → 바뀌어야 함
-    const locked = await cell('2033-03-02', 1, a.id, { isLocked: true }); // 범위 안, 고정 → 유지
+    const locked = await cell('2033-03-02', 1, a.id, { originalTeacherId: b.id, isModified: true }); // 범위 안, 수동 변경 → 유지
     const outside = await cell('2033-03-07', 1, a.id); // 범위 밖 → 유지
     await cell('2033-03-03', 1, b.id);
 

@@ -8,7 +8,6 @@ import {
   fillAssignment,
   getCandidates,
   getCellCandidates,
-  setLock,
   swapAssignments,
   transferAssignment,
   transferPreview,
@@ -52,7 +51,6 @@ const fillSchema = z.object({
   date: dateStringSchema,
   grade: gradeSchema,
   teacherId: z.number().int(),
-  lock: z.boolean().optional(),
   force: z.boolean().optional(),
   note: noteSchema,
 });
@@ -88,16 +86,6 @@ assignmentsRouter.put(
     const parsed = changeSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: '입력값이 올바르지 않습니다.' });
     res.json(await changeAssignment(Number(req.params.id), parsed.data, req.user!));
-  }),
-);
-
-/** PUT /api/assignments/:id/lock — 고정/해제 (ADMIN, 해당 학년부장). */
-assignmentsRouter.put(
-  '/:id/lock',
-  handle(async (req, res) => {
-    const parsed = z.object({ locked: z.boolean() }).safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: '입력값이 올바르지 않습니다.' });
-    res.json(await setLock(Number(req.params.id), parsed.data.locked, req.user!));
   }),
 );
 

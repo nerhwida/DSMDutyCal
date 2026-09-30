@@ -141,7 +141,7 @@ export function CalendarPage() {
   }
 
   async function generate() {
-    if (actionStatus === 'DRAFT' && !window.confirm(`${ym.month}월 ${actionGrade}학년 미리보기를 다시 편성합니다. 고정·수동 변경 셀은 유지됩니다. 계속할까요?`)) {
+    if (actionStatus === 'DRAFT' && !window.confirm(`${ym.month}월 ${actionGrade}학년 미리보기를 다시 편성합니다. 수동 변경 셀은 유지됩니다. 계속할까요?`)) {
       return;
     }
     setBusy(true);
@@ -325,7 +325,6 @@ export function CalendarPage() {
           <span className="rounded bg-yellow-100 px-1" title="자동 편성 결과(확정 시점 교사)와 현재 교사가 다른 셀">
             ↻ 변경됨
           </span>
-          <span>🔒 고정</span>
           <span className="rounded border border-red-500 px-1 text-red-600">미배정</span>
           <span className="rounded border border-dashed border-slate-500 px-1">미리보기</span>
         </div>
@@ -471,7 +470,6 @@ export function CalendarPage() {
                               <span className="w-3 font-normal text-slate-400">{g}</span>
                               <span className="truncate">{a.teacherName}</span>
                               {a.isModified && <span className="text-amber-600">↻</span>}
-                              {a.isLocked && <span>🔒</span>}
                             </button>
                           );
                         })}
@@ -579,7 +577,7 @@ function CellPopover({
           {longDateLabel(assignment.date)} · {assignment.grade}학년 ({GROUP_LABEL[assignment.rotationGroup]})
         </p>
         <p>
-          감독: <span className="font-medium">{assignment.teacherName}</span> {assignment.isLocked && '🔒'}
+          감독: <span className="font-medium">{assignment.teacherName}</span>
         </p>
         {assignment.isModified && <p className="whitespace-pre-line text-xs text-slate-500">{modifiedTooltip(assignment)}</p>}
         {isMine && (

@@ -96,7 +96,7 @@ describe('Scheduler Engine (6.5)', () => {
     const teachers = disjointPools(3);
     const t2 = teachers.find((t) => t.grades[0].grade === 2)!;
     const existing: ExistingAssignment[] = [
-      { date: '2026-10-14', grade: 2, teacherId: t2.id, isLocked: true, isModified: false },
+      { date: '2026-10-14', grade: 2, teacherId: t2.id, isModified: true },
     ];
     const result = generateSchedule(
       baseInput(teachers, { specialDays: [{ date: '2026-10-14', grade: 2 }], existingAssignments: existing }),
@@ -207,19 +207,18 @@ describe('Scheduler Engine (6.5)', () => {
     expect(stat.totalDeviation).toBeLessThanOrEqual(1);
   });
 
-  it('고정된 셀은 재편성 후에도 유지된다', () => {
+  it('수동 변경 셀은 재편성 후에도 유지된다', () => {
     const teachers = disjointPools(4);
     const first = generateSchedule(baseInput(teachers));
 
-    // 1학년 10/14 셀을 다른 교사로 바꾸고 고정
+    // 1학년 10/14 셀을 다른 교사로 바꿈 (수동 변경)
     const original = first.assignments.find((a) => a.date === '2026-10-14' && a.grade === 1)!;
     const other = teachers.find((t) => t.grades[0].grade === 1 && t.id !== original.teacherId)!;
     const existing: ExistingAssignment[] = first.assignments.map((a) => ({
       date: a.date,
       grade: a.grade,
       teacherId: a === original ? other.id : a.teacherId,
-      isLocked: a === original,
-      isModified: false,
+      isModified: a === original,
     }));
 
     const second = generateSchedule(baseInput(teachers, { existingAssignments: existing }));
@@ -248,7 +247,6 @@ describe('Scheduler Engine (6.5)', () => {
       date: a.date,
       grade: a.grade,
       teacherId: a.teacherId,
-      isLocked: false,
       isModified: false,
     }));
 
@@ -275,7 +273,6 @@ describe('Scheduler Engine (6.5)', () => {
       date: a.date,
       grade: a.grade,
       teacherId: a.teacherId,
-      isLocked: false,
       isModified: false,
     }));
 
@@ -293,7 +290,6 @@ describe('Scheduler Engine (6.5)', () => {
       date: a.date,
       grade: a.grade,
       teacherId: a.teacherId,
-      isLocked: false,
       isModified: false,
     }));
 
@@ -303,7 +299,7 @@ describe('Scheduler Engine (6.5)', () => {
 
     // 후보가 1명뿐인 경우: 그 교사가 다른 학년 감독 중이면 미배정 + 사유
     const solo = teacher([1, 2]);
-    const soloGrade2: ExistingAssignment = { date: '2026-10-01', grade: 2, teacherId: solo.id, isLocked: false, isModified: false };
+    const soloGrade2: ExistingAssignment = { date: '2026-10-01', grade: 2, teacherId: solo.id, isModified: false };
     const soloResult = generateSchedule(
       baseInput([solo], { targetGrades: [1], existingAssignments: [soloGrade2] }),
     );

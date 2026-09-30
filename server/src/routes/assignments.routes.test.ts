@@ -77,14 +77,13 @@ describe('본인 감독 교체 권한 (6.5)', () => {
     expect(after.isModified).toBe(true);
   });
 
-  it('2학년 부장이 1학년 셀 변경·고정 시 403', async () => {
+  it('2학년 부장이 1학년 셀 변경 시 403', async () => {
     const a = await newTeacher('1학년셀', [1]);
     const b = await newTeacher('대상', [1]);
     const x = await cell('2031-01-07', 1, a.id);
     const head2 = await loginFixture('2학년부장', '2222');
 
     expect((await head2.put(`/api/assignments/${x.id}`).send({ teacherId: b.id })).status).toBe(403);
-    expect((await head2.put(`/api/assignments/${x.id}/lock`).send({ locked: true })).status).toBe(403);
     expect((await head2.get(`/api/assignments/${x.id}/candidates`)).status).toBe(403);
   });
 
@@ -321,7 +320,7 @@ describe('관리 목적 감독 변경 (F6)', () => {
     expect(await prisma.notification.count({ where: { teacherId: a.id, type: 'REMOVED_BY_CHANGE' } })).toBe(1);
   });
 
-  it('관리자가 지정하면 교체가 아니라 초기 배정이 된다 (변경 표시 없음, 고정, 이력 유지)', async () => {
+  it('관리자가 지정하면 교체가 아니라 초기 배정이 된다 (변경 표시 없음, 이력 유지)', async () => {
     const a = await newTeacher('관리자지정A', [1]);
     const b = await newTeacher('관리자지정B', [1]);
     const x = await cell('2031-07-21', 1, a.id);
@@ -330,7 +329,7 @@ describe('관리 목적 감독 변경 (F6)', () => {
     const res = await admin.put(`/api/assignments/${x.id}`).send({ teacherId: b.id });
     expect(res.status).toBe(200);
     const after = await reload(x.id);
-    expect(after).toMatchObject({ teacherId: b.id, originalTeacherId: b.id, isModified: false, isLocked: true });
+    expect(after).toMatchObject({ teacherId: b.id, originalTeacherId: b.id, isModified: false });
 
     const history = await prisma.assignmentHistory.findMany({ where: { assignmentId: x.id } });
     expect(history).toHaveLength(1);
@@ -361,19 +360,12 @@ describe('관리 목적 감독 변경 (F6)', () => {
     expect(doubled.status).toBe(409);
   });
 
-  it('고정/해제는 해당 학년부장이 할 수 있고, 마감 월은 변경 불가', async () => {
-    const a = await newTeacher('고정A', [1]);
-    const b = await newTeacher('고정B', [1]);
-    const x = await cell('2031-07-03', 1, a.id);
+  it('마감 월은 관리 변경 불가', async () => {
+    const a = await newTeacher('마감변경A', [1]);
+    const b = await newTeacher('마감변경B', [1]);
     const head1 = await loginFixture('1학년부장', '1111');
-
-    const lock = await head1.put(`/api/assignments/${x.id}/lock`).send({ locked: true });
-    expect(lock.status).toBe(200);
-    expect(lock.body.isLocked).toBe(true);
-
     const closed = await cell('2031-08-01', 1, a.id, 'CLOSED');
     expect((await head1.put(`/api/assignments/${closed.id}`).send({ teacherId: b.id })).status).toBe(409);
-    expect((await head1.put(`/api/assignments/${closed.id}/lock`).send({ locked: true })).status).toBe(409);
   });
 });
 

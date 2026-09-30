@@ -12,7 +12,7 @@ interface RegeneratePopoverProps {
   onCancel: () => void;
 }
 
-/** 부분 재편성 (F4): 기간 지정 + "수동 변경 셀도 다시 편성" 옵션. 고정 셀은 항상 유지. */
+/** 부분 재편성 (F4): 기간 지정 + "수동 변경 셀도 다시 편성" 옵션. */
 export function RegeneratePopover({ year, month, grade, status, onDone, onCancel }: RegeneratePopoverProps) {
   const min = toDateString(year, month, 1);
   const max = toDateString(year, month, lastDayOf(year, month));
@@ -55,7 +55,6 @@ export function RegeneratePopover({ year, month, grade, status, onDone, onCancel
         수동 변경 셀(↻)도 다시 편성
       </label>
       <ul className="list-disc space-y-0.5 pl-4 text-xs text-slate-500">
-        <li>고정(🔒) 셀은 항상 유지됩니다.</li>
         {status === 'CONFIRMED' ? (
           <>
             <li>확정된 월이므로 교사가 바뀐 셀은 노란색(↻)으로 표시되고 변경 이력이 남습니다. 알림은 보내지 않습니다.</li>

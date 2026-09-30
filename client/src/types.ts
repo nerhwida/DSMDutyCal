@@ -91,7 +91,6 @@ export interface AssignmentView {
   originalTeacherName: string;
   rotationGroup: RotationGroup;
   isModified: boolean;
-  isLocked: boolean;
   modifiedAt: string | null;
   lastChange: { changedAt: string; changedByName: string; note: string | null } | null;
 }
@@ -157,7 +156,6 @@ export interface CandidatesResponse {
     teacherId: number;
     teacherName: string;
     originalTeacherId: number;
-    isLocked: boolean;
     status: MonthPlanStatus;
   };
   candidates: Candidate[];
@@ -169,7 +167,6 @@ export interface TeacherAssignment {
   grade: Grade;
   rotationGroup: RotationGroup;
   isModified: boolean;
-  isLocked: boolean;
   status: MonthPlanStatus;
 }
 

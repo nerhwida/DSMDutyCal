@@ -52,25 +52,11 @@ export function ManagePopover({ assignmentId, onDone, onCancel }: ManagePopoverP
     }
   }
 
-  async function toggleLock() {
-    setBusy(true);
-    setError(null);
-    try {
-      await api.put(`/api/assignments/${assignmentId}/lock`, { locked: !assignment.isLocked });
-      onDone();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '고정 변경에 실패했습니다.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <div className="space-y-3">
       <div>
         <p className="font-semibold text-slate-800">
           {longDateLabel(assignment.date)} · {assignment.grade}학년
-          {assignment.isLocked && ' 🔒'}
         </p>
         <p className="text-xs text-slate-500">
           현재 감독: {assignment.teacherName} · 괄호 안은 이번 달 {GROUP_LABEL[assignment.rotationGroup]} 감독 횟수
@@ -126,14 +112,7 @@ export function ManagePopover({ assignmentId, onDone, onCancel }: ManagePopoverP
       {closed && <p className="text-xs text-slate-500">마감된 월은 변경할 수 없습니다.</p>}
       {error && <p className="whitespace-pre-line text-xs text-red-600">{error}</p>}
 
-      <div className="flex items-center justify-between">
-        <button
-          onClick={toggleLock}
-          disabled={busy || closed}
-          className="rounded border border-slate-300 px-3 py-1.5 text-slate-700 disabled:opacity-40"
-        >
-          {assignment.isLocked ? '고정 해제' : '고정 🔒'}
-        </button>
+      <div className="flex items-center justify-end">
         <div className="flex gap-2">
           <button onClick={onCancel} className="rounded border border-slate-300 px-3 py-1.5 text-slate-600">
             취소

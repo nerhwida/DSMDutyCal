@@ -35,7 +35,7 @@ function buildRotationOrders(teachers: SchedulerTeacher[]): Map<string, number[]
 /**
  * 자동 편성 (6장). 순수 함수: 입력 → 배정 결과 + 경고 + 공정성 요약.
  * - 대상이 아닌 학년의 기존 배정은 고정값으로 OnePerDay에 반영한다 (6.4-0).
- * - 대상 학년 중 고정·수동 변경·부분 재편성 범위 밖의 셀은 유지하고 누계에 포함한다 (6.4-3).
+ * - 대상 학년 중 수동 변경·부분 재편성 범위 밖의 셀은 유지하고 누계에 포함한다 (6.4-3).
  */
 export function generateSchedule(input: SchedulerInput, rules: HardRule[] = DEFAULT_HARD_RULES): SchedulerResult {
   const targets = new Set<Grade>(input.targetGrades);
@@ -67,7 +67,7 @@ export function generateSchedule(input: SchedulerInput, rules: HardRule[] = DEFA
   for (const a of input.existingAssignments) {
     if (!isOperating(a.date, a.grade)) continue;
     const isTarget = targets.has(a.grade);
-    const keep = !isTarget || a.isLocked || a.isModified || (scope !== null && !scope.has(a.date));
+    const keep = !isTarget || a.isModified || (scope !== null && !scope.has(a.date));
     if (!keep) continue;
 
     if (!fixedByDate.has(a.date)) fixedByDate.set(a.date, new Map());

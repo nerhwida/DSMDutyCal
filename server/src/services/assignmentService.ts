@@ -82,7 +82,7 @@ async function assertSwappable(a: { date: string; grade: number }) {
   }
 }
 
-/** 관리 목적 변경·고정은 CLOSED 월만 차단한다 (F6). */
+/** 관리 목적 변경은 CLOSED 월만 차단한다 (F6). */
 async function assertNotClosed(a: { date: string; grade: number }) {
   const status = await getPlanStatusForDate(a.date, a.grade as Grade);
   if (status === 'CLOSED') throw new ServiceError(409, `${cellLabel(a)}은(는) 마감된 월이라 변경할 수 없습니다.`);
@@ -140,7 +140,6 @@ export async function getCandidates(assignmentId: number, user: AuthenticatedUse
       teacherId: a.teacherId,
       teacherName: a.teacher.name,
       originalTeacherId: a.originalTeacherId,
-      isLocked: a.isLocked,
       status: await getPlanStatusForDate(a.date, a.grade as Grade),
     },
     candidates: candidates.map((c) => ({
@@ -201,11 +200,11 @@ export async function getCellCandidates(date: string, grade: number, user: Authe
 /**
  * POST /api/assignments — 미배정 칸 직접 지정 (ADMIN, 해당 학년부장).
  * 관리 변경(F6)과 같은 규칙: 차단 사유(같은 날 다른 학년·비활성)는 불가, 경고 사유는 force일 때만 허용.
- * 최초 교사 = 지정한 교사 (노란 표시 없음). 재편성에서 덮어쓰이지 않도록 lock(기본 true)으로 고정할 수 있다.
+ * 최초 교사 = 지정한 교사 (노란 표시 없음).
  * 이력은 "미배정 → 교사"(fromTeacherId=null)로 남고, 확정 월이면 지정된 교사에게 알림을 보낸다.
  */
 export async function fillAssignment(
-  input: { date: string; grade: number; teacherId: number; lock?: boolean; force?: boolean; note?: string },
+  input: { date: string; grade: number; teacherId: number; force?: boolean; note?: string },
   user: AuthenticatedUser,
 ) {
   const status = await assertFillableCell(input.date, input.grade, user);
@@ -231,7 +230,6 @@ export async function fillAssignment(
         teacherId: input.teacherId,
         originalTeacherId: input.teacherId,
         rotationGroup: rotationGroupForWeekday(weekdayOf(input.date)),
-        isLocked: input.lock ?? true,
         modifiedAt: new Date(),
       },
     });
@@ -284,7 +282,6 @@ export async function listTeacherAssignments(
       grade: a.grade,
       rotationGroup: a.rotationGroup,
       isModified: a.isModified,
-      isLocked: a.isLocked,
       status,
     });
   }
@@ -366,11 +363,9 @@ export async function changeAssignment(
       data: user.isAdmin
         ? {
             // 관리자가 직접 지정한 교사는 교체가 아니라 초기 배정으로 본다 (변경 표시 없음, 이력은 유지).
-            // 변경 표시가 없으면 부분 재편성이 덮어쓰므로 미배정 칸 지정처럼 고정한다.
             teacherId: input.teacherId,
             originalTeacherId: input.teacherId,
             isModified: false,
-            isLocked: true,
             modifiedAt: new Date(),
           }
         : {
@@ -411,14 +406,6 @@ export async function changeAssignment(
     }
     return updated;
   });
-}
-
-/** PUT /api/assignments/:id/lock — 고정/해제 (ADMIN, 해당 학년부장). */
-export async function setLock(assignmentId: number, locked: boolean, user: AuthenticatedUser) {
-  const a = await loadAssignment(assignmentId);
-  assertGradeScope(user, a.grade);
-  await assertNotClosed(a);
-  return prisma.assignment.update({ where: { id: a.id }, data: { isLocked: locked } });
 }
 
 // ---------------------------------------------------------------------------

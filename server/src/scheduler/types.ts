@@ -45,7 +45,6 @@ export interface ExistingAssignment {
   date: string;
   grade: Grade;
   teacherId: number;
-  isLocked: boolean;
   isModified: boolean;
 }
 
@@ -91,7 +90,7 @@ export interface PlannedAssignment {
   grade: Grade;
   teacherId: number;
   group: RotationGroup;
-  /** KEPT: 기존 배정 유지 (고정·수동 변경·범위 외), GENERATED: 이번 편성으로 생성. */
+  /** KEPT: 기존 배정 유지 (수동 변경·범위 외), GENERATED: 이번 편성으로 생성. */
   source: 'KEPT' | 'GENERATED';
 }
 

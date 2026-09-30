@@ -143,7 +143,6 @@ export async function loadSchedulerInput(
     date: a.date,
     grade: a.grade as Grade,
     teacherId: a.teacherId,
-    isLocked: a.isLocked,
     isModified: a.isModified,
   }));
 
@@ -180,7 +179,7 @@ export interface GenerateResult {
 
 /**
  * 자동 편성 미리보기 (F4). 미편성·DRAFT 월만 가능하며, DRAFT는 덮어쓴다(다시 편성).
- * 고정·수동 변경 셀은 유지된다.
+ * 수동 변경 셀은 유지된다.
  */
 export async function generateMonthPlan(
   year: number,
@@ -268,7 +267,7 @@ export interface RegenerateResult extends Omit<GenerateResult, 'generatedCount' 
 
 /**
  * 부분 재편성 (F4). 지정한 기간[from, to]의 해당 학년 셀만 다시 편성한다.
- * - 고정(🔒) 셀은 항상 유지. 수동 변경 셀은 includeModified=true일 때만 다시 편성.
+ * - 수동 변경 셀은 includeModified=true일 때만 다시 편성.
  * - DRAFT 월: 새 결과로 교체 (자동 편성과 동일한 의미).
  * - CONFIRMED 월 (프로젝트 오너 결정 "B안"): originalTeacherId는 확정 시점 교사로 유지하므로
  *   교사가 바뀐 셀은 노란색(↻)으로 표시되고 변경 이력이 남는다. 알림은 보내지 않는다.
@@ -296,7 +295,7 @@ export async function regenerateMonthPlan(
   const input = await loadSchedulerInput(year, month, [grade], dates);
   if (options.includeModified) {
     input.existingAssignments = input.existingAssignments.map((a) =>
-      a.grade === grade && inScope.has(a.date) && !a.isLocked ? { ...a, isModified: false } : a,
+      a.grade === grade && inScope.has(a.date) ? { ...a, isModified: false } : a,
     );
   }
   const result = generateSchedule(input);
@@ -438,7 +437,7 @@ export async function confirmMonthPlan(year: number, month: number, grade: Grade
 
 /**
  * 월 마감 (F8). 담당 학년의 CONFIRMED 월만 CLOSED로 전환할 수 있다.
- * 마감 후에는 해당 학년·월의 재편성·셀 변경·고정·본인 교체가 모두 차단된다.
+ * 마감 후에는 해당 학년·월의 재편성·셀 변경·본인 교체가 모두 차단된다.
  */
 export async function closeMonthPlan(year: number, month: number, grade: Grade, actorId: number) {
   const status = await getPlanStatus(year, month, grade);
@@ -561,7 +560,6 @@ export async function getMonthView(year: number, month: number, user: Authentica
       originalTeacherName: a.originalTeacher.name,
       rotationGroup: a.rotationGroup,
       isModified: a.isModified,
-      isLocked: a.isLocked,
       modifiedAt: a.modifiedAt,
       lastChange: lastChangeOf.get(a.id) ?? null,
     })),

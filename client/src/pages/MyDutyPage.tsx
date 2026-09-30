@@ -80,7 +80,7 @@ export function MyDutyPage() {
                   </td>
                   <td className="px-3 py-2">{WEEKDAY_KO[weekdayOf(a.date)]}</td>
                   <td className="px-3 py-2">
-                    {a.grade}학년 {a.isModified && <span className="text-amber-600">↻</span>} {a.isLocked && '🔒'}
+                    {a.grade}학년 {a.isModified && <span className="text-amber-600">↻</span>}
                   </td>
                   <td className="px-3 py-2 text-xs">{PLAN_STATUS_LABEL[a.status]}</td>
                   <td className="px-3 py-2 text-right">

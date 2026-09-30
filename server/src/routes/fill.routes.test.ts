@@ -39,7 +39,7 @@ const cell = (date: string, grade: number, teacherId: number) =>
   });
 
 describe('미배정 칸 직접 지정', () => {
-  it('학년부장이 확정 월의 빈 칸에 교사를 지정한다: 기본 고정, 노란 표시 없음, 이력(미배정 → 교사)과 알림', async () => {
+  it('학년부장이 확정 월의 빈 칸에 교사를 지정한다: 노란 표시 없음, 이력(미배정 → 교사)과 알림', async () => {
     const t = await newTeacher('지정');
     await setPlan(2034, 1, 1, 'CONFIRMED');
     const head1 = await loginFixture('1학년부장', '1111');
@@ -54,7 +54,7 @@ describe('미배정 칸 직접 지정', () => {
 
     const res = await head1.post('/api/assignments').send({ date: '2034-01-02', grade: 1, teacherId: t.id, note: '추가 배정' });
     expect(res.status).toBe(201);
-    expect(res.body).toMatchObject({ teacherId: t.id, originalTeacherId: t.id, isModified: false, isLocked: true });
+    expect(res.body).toMatchObject({ teacherId: t.id, originalTeacherId: t.id, isModified: false });
 
     const history = await prisma.assignmentHistory.findFirstOrThrow({ where: { assignmentId: res.body.id } });
     expect(history.fromTeacherId).toBeNull();
@@ -70,13 +70,12 @@ describe('미배정 칸 직접 지정', () => {
     expect(row).toMatchObject({ fromTeacherName: null, toTeacherName: t.name });
   });
 
-  it('고정 없이 지정할 수 있고, DRAFT 월은 알림을 보내지 않는다', async () => {
+  it('DRAFT 월은 알림을 보내지 않는다', async () => {
     const t = await newTeacher('초안지정');
     await setPlan(2034, 2, 1, 'DRAFT');
     const head1 = await loginFixture('1학년부장', '1111');
-    const res = await head1.post('/api/assignments').send({ date: '2034-02-01', grade: 1, teacherId: t.id, lock: false });
+    const res = await head1.post('/api/assignments').send({ date: '2034-02-01', grade: 1, teacherId: t.id });
     expect(res.status).toBe(201);
-    expect(res.body.isLocked).toBe(false);
     expect(await prisma.notification.count({ where: { assignmentId: res.body.id } })).toBe(0);
   });
 
