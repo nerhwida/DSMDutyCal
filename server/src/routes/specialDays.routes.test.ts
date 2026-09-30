@@ -108,6 +108,27 @@ describe('특별 일정 등록 (F3)', () => {
     expect(rows.filter((r) => r.type === 'SCHOOL_CLOSURE')).toHaveLength(3);
   });
 
+  it('의무귀가는 weekdaysOnly로 기간 안의 평일만 등록할 수 있다', async () => {
+    const adminId = await findTeacherId(process.env.ADMIN_NAME!);
+    const agent = await loginAgent(adminId, process.env.ADMIN_INITIAL_PIN!);
+    // 2039-08-05(금) ~ 08-08(월): 평일은 5일·8일
+    const res = await agent.post('/api/special-days').send({
+      startDate: '2039-08-05',
+      endDate: '2039-08-08',
+      type: 'MANDATORY_HOME',
+      title: '의무귀가',
+      grades: [3],
+      weekdaysOnly: true,
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.map((d: { date: string; grade: number }) => `${d.date}:${d.grade}`)).toEqual(['2039-08-05:3', '2039-08-08:3']);
+
+    const weekendOnly = await agent
+      .post('/api/special-days')
+      .send({ startDate: '2039-08-06', endDate: '2039-08-07', type: 'MANDATORY_HOME', title: '의무귀가', weekdaysOnly: true });
+    expect(weekendOnly.status).toBe(400);
+  });
+
   it('이미 배정이 있는 날짜에 등록하면 경고 후, 확인 시 배정이 삭제된다', async () => {
     const adminId = await findTeacherId(process.env.ADMIN_NAME!);
     const teacherId = await findTeacherId('평교사');

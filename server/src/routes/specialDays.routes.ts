@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
-import { dateRange } from '../lib/dateUtils.js';
+import { dateRange, isWeekend } from '../lib/dateUtils.js';
 import { dateStringSchema, gradeSchema, specialDayTypeSchema } from '../lib/validation.js';
 import { HOLIDAYS_BY_YEAR } from '../data/holidaysKr.js';
 import { requireAuth, requireScheduleManager } from '../permissions/middleware.js';
@@ -54,6 +54,8 @@ const rangeSchema = z.object({
   title: z.string().min(1, '일정명을 입력해주세요.'),
   grades: gradesSchema,
   confirmDeleteAssignments: z.boolean().optional(),
+  /** 기간 안의 평일(월~금)만 등록 (의무귀가 등록 화면에서 사용) */
+  weekdaysOnly: z.boolean().optional(),
 });
 
 /**
@@ -151,6 +153,8 @@ specialDaysRouter.post('/', requireScheduleManager, async (req, res) => {
     } catch {
       return res.status(400).json({ error: '시작일이 종료일보다 늦을 수 없습니다.' });
     }
+    if (rangeParsed.data.weekdaysOnly) dates = dates.filter((d) => !isWeekend(d));
+    if (dates.length === 0) return res.status(400).json({ error: '기간 안에 평일이 없습니다.' });
     body = rangeParsed.data;
   } else if (singleParsed.success) {
     dates = [singleParsed.data.date];

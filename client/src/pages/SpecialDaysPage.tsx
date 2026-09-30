@@ -2,10 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { AfterSchoolSection } from '../components/AfterSchoolSection';
+import { GradeChecks } from '../components/GradeChecks';
+import { MandatoryHomeSection } from '../components/MandatoryHomeSection';
 import type { Grade, SpecialDay, SpecialDayType } from '../types';
 import { SPECIAL_DAY_TYPE_LABEL } from '../types';
 
-const TYPES: SpecialDayType[] = ['MANDATORY_HOME', 'HOLIDAY', 'VACATION', 'SCHOOL_CLOSURE', 'EXAM', 'EVENT', 'OTHER'];
+// 의무귀가는 별도 영역(MandatoryHomeSection)에서 등록한다.
+const TYPES: SpecialDayType[] = ['HOLIDAY', 'VACATION', 'SCHOOL_CLOSURE', 'EXAM', 'EVENT', 'OTHER'];
 const GRADES: Grade[] = [1, 2, 3];
 
 /** 화면 표시 단위: 같은 날짜·유형·일정명의 학년별 행을 하나로 묶는다. */
@@ -28,23 +31,6 @@ function groupRows(rows: SpecialDay[]): SpecialGroup[] {
     g.ids.push(d.id);
   }
   return [...map.values()].map((g) => ({ ...g, grades: g.grades.sort() }));
-}
-
-function GradeChecks({ value, onChange }: { value: Grade[]; onChange: (grades: Grade[]) => void }) {
-  return (
-    <div className="flex items-center gap-3 text-sm">
-      {GRADES.map((g) => (
-        <label key={g} className="flex items-center gap-1">
-          <input
-            type="checkbox"
-            checked={value.includes(g)}
-            onChange={(e) => onChange(e.target.checked ? [...new Set([...value, g])].sort() : value.filter((x) => x !== g))}
-          />
-          {g}학년
-        </label>
-      ))}
-    </div>
-  );
 }
 
 interface EditState {
@@ -84,7 +70,7 @@ export function SpecialDaysPage() {
     load();
   }, [load]);
 
-  const groups = useMemo(() => groupRows(days), [days]);
+  const groups = useMemo(() => groupRows(days.filter((d) => d.type !== 'MANDATORY_HOME')), [days]);
 
   if (!user) return null;
   // 관리자·학년부장(모든 학년)이 일정을 관리한다. ADMIN은 gradeHeadOf=[1,2,3].
@@ -168,6 +154,7 @@ export function SpecialDaysPage() {
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <AfterSchoolSection canManage={canManage} />
+      <MandatoryHomeSection canManage={canManage} days={days} onChanged={load} />
 
       {canManage && (
         <div className="space-y-3 rounded border border-slate-200 bg-white p-4">
