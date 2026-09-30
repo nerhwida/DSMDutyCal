@@ -21,11 +21,10 @@ function valuesOf(r: Row, grade: Grade | null) {
 export function StatusPanel({ stats, gradeFilter, myId }: StatusPanelProps) {
   if (!stats) return <aside className="w-80 shrink-0 text-xs text-slate-400">현황 불러오는 중…</aside>;
 
-  // 감독 가능 학년이 있거나 배정·누계가 있는 교사 (학년을 고르면 그 학년 기준)
-  const visible = (r: Row) => {
-    const v = valuesOf(r, gradeFilter);
-    return (gradeFilter ? r.grades.includes(gradeFilter) : r.grades.length > 0) || v.month > 0 || v.total > 0;
-  };
+  // 학년을 고르면 교사 관리에서 그 학년(월~목/금)이 체크된 교사만.
+  // 전체일 때는 감독 가능 학년이 있거나 배정·누계가 있는 교사.
+  const visible = (r: Row) =>
+    gradeFilter ? r.grades.includes(gradeFilter) : r.grades.length > 0 || r.monthTotal > 0 || r.total > 0;
   // 학년별로 묶는다: 학년을 고르면 그 학년 하나, 아니면 가장 낮은 감독 가능 학년 (없으면 '학년 미지정')
   const sectionOf = (r: Row): number => gradeFilter ?? r.grades[0] ?? 0;
   // 묶음 안은 총 감독 일수(누계) 오름차순 → 이름순
