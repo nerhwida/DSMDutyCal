@@ -10,7 +10,13 @@ import {
   weekdayExclusionReasonSchema,
   weekdaySchema,
 } from '../lib/validation.js';
-import { requireAdmin, requireAuth, requireGradeScope, requireSelfOrAdmin } from '../permissions/middleware.js';
+import {
+  requireAdmin,
+  requireAuth,
+  requireGradeScope,
+  requireScheduleManager,
+  requireSelfOrAdmin,
+} from '../permissions/middleware.js';
 import { handle } from '../lib/http.js';
 import { listTeacherAssignments } from '../services/assignmentService.js';
 
@@ -27,6 +33,7 @@ teachersRouter.get('/', async (_req, res) => {
       teacherGrades: true,
       weekdayExclusions: true,
       unavailableDates: { orderBy: { date: 'asc' } },
+      statsExclusions: { orderBy: [{ year: 'asc' }, { month: 'asc' }] },
       gradeHead: true,
     },
   });
@@ -107,6 +114,7 @@ teachersRouter.delete('/:id', requireAdmin, async (req, res) => {
     prisma.teacherGrade.deleteMany({ where: { teacherId: id } }),
     prisma.teacherWeekdayExclusion.deleteMany({ where: { teacherId: id } }),
     prisma.teacherUnavailableDate.deleteMany({ where: { teacherId: id } }),
+    prisma.teacherStatsExclusion.deleteMany({ where: { teacherId: id } }),
     prisma.initialCount.deleteMany({ where: { teacherId: id } }),
     prisma.teacher.delete({ where: { id } }),
   ]);
@@ -242,6 +250,59 @@ teachersRouter.delete(
     await prisma.teacherUnavailableDate.delete({ where: { id: recordId } });
     res.json({ ok: true });
   },
+);
+
+const ymSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, '월은 YYYY-MM 형식이어야 합니다.');
+const statsExclusionSchema = z
+  .object({ from: ymSchema, to: ymSchema.optional() })
+  .transform((v) => ({ from: v.from, to: v.to ?? v.from }))
+  .refine((v) => v.from <= v.to, '시작 월이 끝 월보다 늦을 수 없습니다.');
+
+/**
+ * POST /api/teachers/:id/stats-exclusions — 통계 제외 월 등록 {from: 'YYYY-MM', to?} (ADMIN, 학년부장).
+ * 휴직·파견 등으로 그 달 통계 목록·공정성 지표에서 뺄 교사. 이미 등록된 월은 그대로 둔다.
+ */
+teachersRouter.post(
+  '/:id/stats-exclusions',
+  requireScheduleManager,
+  handle(async (req, res) => {
+    const teacherId = Number(req.params.id);
+    const parsed = statsExclusionSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? '월을 올바르게 입력해주세요.' });
+    if (!(await prisma.teacher.findUnique({ where: { id: teacherId } }))) {
+      return res.status(404).json({ error: '해당 교사를 찾을 수 없습니다.' });
+    }
+    const months: { year: number; month: number }[] = [];
+    let [y, m] = parsed.data.from.split('-').map(Number);
+    const [ty, tm] = parsed.data.to.split('-').map(Number);
+    while (y < ty || (y === ty && m <= tm)) {
+      months.push({ year: y, month: m });
+      [y, m] = m === 12 ? [y + 1, 1] : [y, m + 1];
+      if (months.length > 36) return res.status(400).json({ error: '한 번에 36개월까지 등록할 수 있습니다.' });
+    }
+    for (const { year, month } of months) {
+      await prisma.teacherStatsExclusion.upsert({
+        where: { teacherId_year_month: { teacherId, year, month } },
+        update: {},
+        create: { teacherId, year, month },
+      });
+    }
+    res.status(201).json({ added: months.length });
+  }),
+);
+
+/** DELETE /api/teachers/:id/stats-exclusions/:recordId — 통계 제외 월 삭제 (ADMIN, 학년부장). */
+teachersRouter.delete(
+  '/:id/stats-exclusions/:recordId',
+  requireScheduleManager,
+  handle(async (req, res) => {
+    const record = await prisma.teacherStatsExclusion.findUnique({ where: { id: Number(req.params.recordId) } });
+    if (!record || record.teacherId !== Number(req.params.id)) {
+      return res.status(404).json({ error: '해당 기록을 찾을 수 없습니다.' });
+    }
+    await prisma.teacherStatsExclusion.delete({ where: { id: record.id } });
+    res.json({ ok: true });
+  }),
 );
 
 const weekdayExclusionsSchema = z.array(

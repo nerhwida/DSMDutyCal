@@ -29,6 +29,7 @@ model Teacher {
   teacherGrades       TeacherGrade[]
   weekdayExclusions   TeacherWeekdayExclusion[]
   unavailableDates    TeacherUnavailableDate[]
+  statsExclusions     TeacherStatsExclusion[]
   initialCounts       InitialCount[]
   notifications       Notification[]
   auditLogs           AuditLog[]
@@ -93,6 +94,19 @@ model TeacherUnavailableDate {
   teacher Teacher @relation(fields: [teacherId], references: [id])
 
   @@unique([teacherId, date])
+}
+
+/// 통계 제외 월 (교사 × 월). 휴직·파견 등으로 그 달 통계에서 빼야 하는 교사.
+/// 해당 월의 현황 패널·기간 통계 목록에 표시하지 않고 공정성 지표(편차)에서도 뺀다. 감독 횟수·편성 누계는 그대로.
+model TeacherStatsExclusion {
+  id        Int @id @default(autoincrement())
+  teacherId Int
+  year      Int
+  month     Int // 1~12
+
+  teacher Teacher @relation(fields: [teacherId], references: [id])
+
+  @@unique([teacherId, year, month])
 }
 
 /// 특별 일정 (날짜 × 학년 단위). type: 'MANDATORY_HOME' | 'HOLIDAY' | 'EXAM' | 'EVENT' | 'OTHER'

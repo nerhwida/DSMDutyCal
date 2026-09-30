@@ -163,6 +163,14 @@ export function StatsPage() {
                     <td className="px-3 py-1.5 text-left">
                       {r.name}
                       {!r.active && ' (비활성)'}
+                      {r.excludedMonths.length > 0 && (
+                        <span
+                          className="ml-1 rounded bg-slate-100 px-1 text-[11px] text-slate-500"
+                          title="이 달들은 통계에서 제외되어 공정성 지표에 포함되지 않습니다"
+                        >
+                          제외 {r.excludedMonths.map((m) => `${Number(m.slice(5))}월`).join('·')}
+                        </span>
+                      )}
                     </td>
                     {g ? (
                       <>
@@ -227,7 +235,7 @@ export function StatsPage() {
               </tbody>
             </table>
             <p className="border-t border-slate-100 px-3 py-1 text-[11px] text-slate-400">
-              해당 학년·그룹 감독이 가능한 활성 교사 기준 · 편차 2 이상이면 ⚠
+              해당 학년·그룹 감독이 가능한 활성 교사 기준 (기간 중 통계 제외 월이 있는 교사 제외) · 편차 2 이상이면 ⚠
             </p>
           </div>
         </>

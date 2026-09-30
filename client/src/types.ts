@@ -60,6 +60,8 @@ export interface Teacher {
   teacherGrades: TeacherGrade[];
   weekdayExclusions: TeacherWeekdayExclusion[];
   unavailableDates: TeacherUnavailableDate[];
+  /** 통계 제외 월 (휴직·파견 등) */
+  statsExclusions: { id: number; year: number; month: number }[];
   gradeHead: GradeHeadRef | null;
 }
 
@@ -269,6 +271,8 @@ export interface RangeStats {
     weekdayTotal: number;
     fridayTotal: number;
     grandTotal: number;
+    /** 기간 중 통계 제외 월 ('YYYY-MM') */
+    excludedMonths: string[];
   }[];
   fairness: { grade: Grade; group: RotationGroup; period: Deviation; total: Deviation }[];
 }

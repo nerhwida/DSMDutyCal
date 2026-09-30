@@ -299,6 +299,35 @@ describe('기간 통계 (F7)', () => {
     expect(juneRow).toMatchObject({ periodTotal: 1, grandTotal: 1 });
   });
 
+  it('교사별 통계 제외 월: 그 달 현황·통계 목록에서 빠지고, 기간 전체가 제외면 기간 통계에서도 숨긴다', async () => {
+    const x = await newTeacher('통계제외', [1]);
+    const head1 = await loginFixture('1학년부장', '1111');
+
+    // 일반 교사는 등록할 수 없다
+    expect((await x.agent.post(`/api/teachers/${x.id}/stats-exclusions`).send({ from: '2038-03' })).status).toBe(403);
+    expect((await head1.post(`/api/teachers/${x.id}/stats-exclusions`).send({ from: '2038-04', to: '2038-03' })).status).toBe(400);
+
+    const add = await head1.post(`/api/teachers/${x.id}/stats-exclusions`).send({ from: '2038-03', to: '2038-04' });
+    expect(add.status).toBe(201);
+    expect(add.body.added).toBe(2);
+    const listed = (await head1.get('/api/teachers')).body.find((t: { id: number }) => t.id === x.id);
+    expect(listed.statsExclusions.map((e: { year: number; month: number }) => `${e.year}-${e.month}`)).toEqual(['2038-3', '2038-4']);
+
+    const has = (rows: { teacherId: number }[]) => rows.some((r) => r.teacherId === x.id);
+    expect(has((await head1.get('/api/stats?year=2038&month=3')).body.rows)).toBe(false);
+    expect(has((await head1.get('/api/stats?year=2038&month=5')).body.rows)).toBe(true);
+    expect(has((await head1.get('/api/stats/range?from=2038-03&to=2038-04')).body.rows)).toBe(false);
+    const partial = (await head1.get('/api/stats/range?from=2038-03&to=2038-05')).body.rows.find(
+      (r: { teacherId: number }) => r.teacherId === x.id,
+    );
+    expect(partial.excludedMonths).toEqual(['2038-03', '2038-04']);
+
+    // 삭제하면 다시 나온다
+    const march = listed.statsExclusions[0];
+    expect((await head1.delete(`/api/teachers/${x.id}/stats-exclusions/${march.id}`)).status).toBe(200);
+    expect(has((await head1.get('/api/stats?year=2038&month=3')).body.rows)).toBe(true);
+  });
+
   it('기간이 잘못되면 400', async () => {
     const admin = await adminAgent();
     expect((await admin.get('/api/stats/range?from=2033-08&to=2033-06')).status).toBe(400);

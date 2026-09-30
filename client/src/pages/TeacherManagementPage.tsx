@@ -17,6 +17,7 @@ export function TeacherManagementPage() {
   const [newName, setNewName] = useState('');
   const [newPin, setNewPin] = useState('');
   const [expandedUnavailable, setExpandedUnavailable] = useState<number | null>(null);
+  const [expandedStats, setExpandedStats] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -39,6 +40,8 @@ export function TeacherManagementPage() {
 
   const canEditGrade = (grade: Grade) => user.isAdmin || user.gradeHeadOf.includes(grade);
   const isSelfOrAdmin = (teacherId: number) => user.isAdmin || user.id === teacherId;
+  // 통계 제외 월은 관리자·학년부장이 관리한다
+  const canManageStats = user.gradeHeadOf.length > 0;
 
   async function handleError(fn: () => Promise<void>) {
     try {
@@ -113,6 +116,20 @@ export function TeacherManagementPage() {
     });
   }
 
+  async function addStatsExclusion(teacher: Teacher, from: string, to: string) {
+    await handleError(async () => {
+      await api.post(`/api/teachers/${teacher.id}/stats-exclusions`, { from, to: to || from });
+      await load();
+    });
+  }
+
+  async function removeStatsExclusion(teacher: Teacher, recordId: number) {
+    await handleError(async () => {
+      await api.delete(`/api/teachers/${teacher.id}/stats-exclusions/${recordId}`);
+      await load();
+    });
+  }
+
   async function createTeacher(e: React.FormEvent) {
     e.preventDefault();
     await handleError(async () => {
@@ -168,6 +185,9 @@ export function TeacherManagementPage() {
                   </th>
                 ))}
                 <th className="px-3 py-2 text-left">감독 불가일</th>
+                <th className="px-3 py-2 text-left" title="휴직·파견 등으로 그 달 통계 목록과 공정성 지표에서 뺄 월">
+                  통계 제외 월
+                </th>
                 <th className="px-3 py-2 text-left">관리</th>
               </tr>
             </thead>
@@ -238,6 +258,22 @@ export function TeacherManagementPage() {
                         editable={isSelfOrAdmin(t.id)}
                         onAdd={(date, reason) => addUnavailable(t, date, reason)}
                         onRemove={(id) => removeUnavailable(t, id)}
+                      />
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    <button
+                      className="text-xs text-slate-600 underline"
+                      onClick={() => setExpandedStats(expandedStats === t.id ? null : t.id)}
+                    >
+                      {t.statsExclusions.length > 0 ? `${t.statsExclusions.length}개월` : '없음'}
+                    </button>
+                    {expandedStats === t.id && (
+                      <StatsExclusionPanel
+                        teacher={t}
+                        editable={canManageStats}
+                        onAdd={(from, to) => addStatsExclusion(t, from, to)}
+                        onRemove={(id) => removeStatsExclusion(t, id)}
                       />
                     )}
                   </td>
@@ -433,6 +469,73 @@ function UnavailablePanel({
                 onAdd(date, reason);
                 setDate('');
                 setReason('');
+              }
+            }}
+          >
+            추가
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 통계 제외 월 (휴직·파견 등). 그 달 통계 목록과 공정성 지표에서 뺀다. */
+function StatsExclusionPanel({
+  teacher,
+  editable,
+  onAdd,
+  onRemove,
+}: {
+  teacher: Teacher;
+  editable: boolean;
+  onAdd: (from: string, to: string) => void;
+  onRemove: (recordId: number) => void;
+}) {
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+
+  return (
+    <div className="mt-2 w-64 rounded border border-slate-200 bg-slate-50 p-2">
+      <p className="mb-1 text-[11px] text-slate-500">
+        제외한 달에는 통계·현황 목록에 나오지 않고 공정성 지표에서도 빠집니다. 감독 횟수와 편성은 그대로입니다.
+      </p>
+      <ul className="mb-2 flex flex-wrap gap-1">
+        {teacher.statsExclusions.map((e) => (
+          <li key={e.id} className="flex items-center gap-1 rounded bg-white px-1.5 text-xs ring-1 ring-slate-200">
+            {e.year}.{String(e.month).padStart(2, '0')}
+            {editable && (
+              <button className="text-red-500" title="삭제" onClick={() => onRemove(e.id)}>
+                ×
+              </button>
+            )}
+          </li>
+        ))}
+        {teacher.statsExclusions.length === 0 && <li className="text-xs text-slate-400">제외한 달이 없습니다.</li>}
+      </ul>
+      {editable && (
+        <div className="flex flex-wrap items-center gap-1">
+          <input
+            type="month"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+            className="w-28 rounded border border-slate-300 px-1 py-0.5 text-xs"
+          />
+          ~
+          <input
+            type="month"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            title="비우면 한 달만"
+            className="w-28 rounded border border-slate-300 px-1 py-0.5 text-xs"
+          />
+          <button
+            className="rounded bg-slate-700 px-2 text-xs text-white"
+            onClick={() => {
+              if (from) {
+                onAdd(from, to);
+                setFrom('');
+                setTo('');
               }
             }}
           >

@@ -25,12 +25,22 @@ const get = (counter: Counter, teacherId: number, grade: number, group: string) 
  * 모두 **실제 배정**(현재 teacherId, 해당 셀의 학년·그룹) 기준이다.
  */
 async function aggregate(start: string, end: string, user: AuthenticatedUser, includeVisibleDraft: boolean) {
-  const [teachers, plans, initialCounts, upToEnd] = await Promise.all([
+  const [teachers, plans, initialCounts, upToEnd, exclusions] = await Promise.all([
     prisma.teacher.findMany({ include: { teacherGrades: true }, orderBy: { sortOrder: 'asc' } }),
     prisma.monthPlan.findMany(),
     prisma.initialCount.findMany(),
     prisma.assignment.findMany({ where: { date: { lte: end } } }),
+    prisma.teacherStatsExclusion.findMany(),
   ]);
+
+  // 통계 제외 월: 교사 → 'YYYY-MM' 집합 (기간 안의 것만)
+  const excludedMonths = new Map<number, Set<string>>();
+  for (const e of exclusions) {
+    const ym = monthKey(e.year, e.month);
+    if (ym < start.slice(0, 7) || ym > end.slice(0, 7)) continue;
+    if (!excludedMonths.has(e.teacherId)) excludedMonths.set(e.teacherId, new Set());
+    excludedMonths.get(e.teacherId)!.add(ym);
+  }
 
   const statusOf = new Map(plans.map((p) => [`${p.year}-${p.month}-${p.grade}`, p.status as MonthPlanStatus]));
   const planStatus = (date: string, grade: number) => {
@@ -55,7 +65,21 @@ async function aggregate(start: string, end: string, user: AuthenticatedUser, in
         t.active && t.teacherGrades.some((g) => g.grade === grade && (group === 'FRIDAY' ? g.canFriday : g.canWeekday)),
     );
 
-  return { teachers, period, totals, eligible };
+  return { teachers, period, totals, eligible, excludedMonths };
+}
+
+const monthKey = (year: number, month: number) => `${year}-${String(month).padStart(2, '0')}`;
+
+/** [start, end] 기간의 'YYYY-MM' 목록. */
+function monthsBetween(start: string, end: string): string[] {
+  const months: string[] = [];
+  let [y, m] = start.split('-').map(Number);
+  const [ey, em] = end.split('-').map(Number);
+  while (y < ey || (y === ey && m <= em)) {
+    months.push(monthKey(y, m));
+    [y, m] = m === 12 ? [y + 1, 1] : [y, m + 1];
+  }
+  return months;
 }
 
 function gradeGroupRecord(counter: Counter, teacherId: number) {
@@ -81,10 +105,12 @@ function deviation(counts: number[]) {
  */
 export async function getMonthStats(year: number, month: number, user: AuthenticatedUser) {
   const { start, end } = monthBounds(year, month);
-  const { teachers, period, totals, eligible } = await aggregate(start, end, user, true);
+  const { teachers, period, totals, eligible, excludedMonths } = await aggregate(start, end, user, true);
+  // 이 달 통계 제외 교사는 목록·공정성 지표에서 뺀다
+  const excluded = (teacherId: number) => excludedMonths.has(teacherId);
 
   const rows = teachers
-    .filter((t) => t.active || period.has(t.id))
+    .filter((t) => (t.active || period.has(t.id)) && !excluded(t.id))
     .map((t) => {
       const month = { 1: 0, 2: 0, 3: 0 } as Record<Grade, number>;
       for (const g of GRADES) month[g] = sumBy(period, t.id, (grade) => grade === g);
@@ -105,7 +131,7 @@ export async function getMonthStats(year: number, month: number, user: Authentic
 
   const fairness = GRADES.flatMap((grade) =>
     GROUPS.map((group: RotationGroup) => {
-      const pool = eligible(grade, group);
+      const pool = eligible(grade, group).filter((t) => !excluded(t.id));
       if (pool.length === 0) return null;
       return { grade: grade as Grade, group, ...deviation(pool.map((t) => get(totals, t.id, grade, group))) };
     }),
@@ -125,10 +151,14 @@ export async function getRangeStats(
 ) {
   const start = monthBounds(fromYm.year, fromYm.month).start;
   const end = monthBounds(toYm.year, toYm.month).end;
-  const { teachers, period, totals, eligible } = await aggregate(start, end, user, false);
+  const { teachers, period, totals, eligible, excludedMonths } = await aggregate(start, end, user, false);
+  // 통계 제외: 기간의 모든 달이 제외면 목록에서 숨기고, 한 달이라도 제외면 공정성 지표에서 뺀다
+  const monthCount = monthsBetween(start, end).length;
+  const excludedAll = (teacherId: number) => (excludedMonths.get(teacherId)?.size ?? 0) >= monthCount;
+  const excludedAny = (teacherId: number) => excludedMonths.has(teacherId);
 
   const rows = teachers
-    .filter((t) => t.active || period.has(t.id))
+    .filter((t) => (t.active || period.has(t.id)) && !excludedAll(t.id))
     .map((t) => {
       const periodWeekday = sumBy(period, t.id, (_g, group) => group === 'WEEKDAY');
       const periodFriday = sumBy(period, t.id, (_g, group) => group === 'FRIDAY');
@@ -146,12 +176,14 @@ export async function getRangeStats(
         weekdayTotal,
         fridayTotal,
         grandTotal: weekdayTotal + fridayTotal,
+        /** 기간 중 통계 제외 월 ('YYYY-MM') */
+        excludedMonths: [...(excludedMonths.get(t.id) ?? [])].sort(),
       };
     });
 
   const fairness = GRADES.flatMap((grade) =>
     GROUPS.map((group: RotationGroup) => {
-      const pool = eligible(grade, group);
+      const pool = eligible(grade, group).filter((t) => !excludedAny(t.id));
       if (pool.length === 0) return null;
       return {
         grade: grade as Grade,
