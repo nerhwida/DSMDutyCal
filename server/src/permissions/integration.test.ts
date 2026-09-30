@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app.js';
-import { findTeacherId } from '../test/helpers.js';
+import { findTeacherId, loginBody } from '../test/helpers.js';
 
 /**
  * 6.5절 "권한(Supertest 통합 테스트)" 중 권한 매트릭스(F1-1) 기본 검증.
@@ -12,7 +12,7 @@ const app = createApp();
 
 async function loginAgent(teacherId: number, pin: string) {
   const agent = request.agent(app);
-  await agent.post('/api/auth/login').send({ teacherId, pin });
+  await agent.post('/api/auth/login').send(await loginBody(teacherId, pin));
   return agent;
 }
 

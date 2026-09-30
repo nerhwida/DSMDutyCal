@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app.js';
-import { findTeacherId } from '../test/helpers.js';
+import { findTeacherId, loginBody } from '../test/helpers.js';
 import { hashPin } from '../auth/pin.js';
 import { prisma } from '../lib/prisma.js';
 import { weekdayOf } from '../lib/dateUtils.js';
@@ -23,7 +23,7 @@ async function newTeacher(prefix: string, grades: number[] = [1]) {
 }
 async function loginFixture(name: string, pin: string) {
   const agent = request.agent(app);
-  await agent.post('/api/auth/login').send({ teacherId: await findTeacherId(name), pin });
+  await agent.post('/api/auth/login').send(await loginBody(await findTeacherId(name), pin));
   return agent;
 }
 async function setPlan(year: number, month: number, grade: number, status: 'DRAFT' | 'CONFIRMED' | 'CLOSED') {

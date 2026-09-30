@@ -7,29 +7,19 @@ import { requireAuth } from '../permissions/middleware.js';
 
 export const authRouter = Router();
 
-/** GET /api/auth/teachers — 로그인 화면용 교사 이름 목록 (공개). */
-authRouter.get('/teachers', async (_req, res) => {
-  const teachers = await prisma.teacher.findMany({
-    where: { active: true },
-    select: { id: true, name: true },
-    orderBy: { sortOrder: 'asc' },
-  });
-  res.json(teachers);
-});
-
 const loginSchema = z.object({
-  teacherId: z.number().int(),
+  name: z.string().trim().min(1),
   pin: z.string().min(4).max(6),
 });
 
-/** POST /api/auth/login — 이름(teacherId) + PIN 로그인. */
+/** POST /api/auth/login — 이름 + PIN 로그인. (로그인 화면에 교사 목록을 공개하지 않는다.) */
 authRouter.post('/login', async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: '이름과 PIN을 올바르게 입력해주세요.' });
   }
 
-  const result = await login(parsed.data.teacherId, parsed.data.pin);
+  const result = await login(parsed.data.name, parsed.data.pin);
   if (!result.ok) {
     if (result.reason === 'LOCKED') {
       return res.status(423).json({

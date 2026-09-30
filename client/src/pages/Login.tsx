@@ -1,37 +1,18 @@
-import { useEffect, useMemo, useState } from 'react';
-import { api } from '../api/client';
+import { useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
-
-interface TeacherOption {
-  id: number;
-  name: string;
-}
 
 export function LoginPage() {
   const { login } = useAuth();
-  const [teachers, setTeachers] = useState<TeacherOption[]>([]);
-  const [search, setSearch] = useState('');
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [name, setName] = useState('');
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    api.get<TeacherOption[]>('/api/auth/teachers').then(setTeachers).catch(() => {
-      setError('교사 목록을 불러오지 못했습니다.');
-    });
-  }, []);
-
-  const filtered = useMemo(
-    () => teachers.filter((t) => t.name.includes(search.trim())),
-    [teachers, search],
-  );
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (selectedId === null) {
-      setError('교사를 선택해주세요.');
+    if (!name.trim()) {
+      setError('이름을 입력해주세요.');
       return;
     }
     if (!/^\d{4,6}$/.test(pin)) {
@@ -40,7 +21,7 @@ export function LoginPage() {
     }
     setSubmitting(true);
     try {
-      await login(selectedId, pin);
+      await login(name.trim(), pin);
     } catch (err) {
       setError(err instanceof Error ? err.message : '로그인에 실패했습니다.');
     } finally {
@@ -60,27 +41,17 @@ export function LoginPage() {
         <label className="mb-1 block text-sm font-medium text-slate-700">교사 이름</label>
         <input
           type="text"
-          placeholder="이름 검색"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="mb-2 w-full rounded border border-slate-300 px-3 py-2 text-sm"
-        />
-        <select
-          value={selectedId ?? ''}
-          onChange={(e) => setSelectedId(e.target.value ? Number(e.target.value) : null)}
+          autoComplete="username"
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
           className="mb-4 w-full rounded border border-slate-300 px-3 py-2 text-sm"
-        >
-          <option value="">선택하세요</option>
-          {filtered.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </select>
+        />
 
         <label className="mb-1 block text-sm font-medium text-slate-700">PIN (4~6자리)</label>
         <input
           type="password"
+          autoComplete="current-password"
           inputMode="numeric"
           maxLength={6}
           value={pin}

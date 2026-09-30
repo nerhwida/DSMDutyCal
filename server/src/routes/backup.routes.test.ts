@@ -5,7 +5,7 @@ import path from 'node:path';
 import request from 'supertest';
 import { PrismaClient } from '@prisma/client';
 import { createApp } from '../app.js';
-import { findTeacherId } from '../test/helpers.js';
+import { findTeacherId, loginBody } from '../test/helpers.js';
 import { prisma } from '../lib/prisma.js';
 import { applyPendingRestore, backupsDir, monthlyBackupsDir, pendingRestorePath } from '../lib/dbFile.js';
 import {
@@ -20,7 +20,7 @@ const ADMIN_PIN = process.env.ADMIN_INITIAL_PIN!;
 
 async function adminAgent() {
   const agent = request.agent(app);
-  await agent.post('/api/auth/login').send({ teacherId: await findTeacherId(process.env.ADMIN_NAME!), pin: ADMIN_PIN });
+  await agent.post('/api/auth/login').send(await loginBody(await findTeacherId(process.env.ADMIN_NAME!), ADMIN_PIN));
   return agent;
 }
 
@@ -47,7 +47,7 @@ describe('로그인 세션 DB 저장', () => {
   it('서버를 새로 만들어도(재시작) 같은 쿠키로 로그인이 유지되고, 로그아웃하면 끊긴다', async () => {
     const login = await request(createApp())
       .post('/api/auth/login')
-      .send({ teacherId: await findTeacherId('평교사'), pin: '4444' });
+      .send(await loginBody(await findTeacherId('평교사'), '4444'));
     expect(login.status).toBe(200);
     const setCookie = login.headers['set-cookie'] as unknown as string[];
     const sid = setCookie[0].split(';')[0]; // 'dutycal.sid=...'
@@ -72,14 +72,14 @@ describe('DB 백업/복원 (F11)', () => {
     expect((res.body as Buffer).subarray(0, 15).toString('latin1')).toBe('SQLite format 3');
 
     const teacher = request.agent(app);
-    await teacher.post('/api/auth/login').send({ teacherId: await findTeacherId('평교사'), pin: '4444' });
+    await teacher.post('/api/auth/login').send(await loginBody(await findTeacherId('평교사'), '4444'));
     expect((await teacher.get('/api/backup')).status).toBe(403);
   });
 
   it('백업 파일에는 로그인 세션이 없다 (행은 물론 파일 바이트에도 세션 ID가 남지 않는다)', async () => {
     const login = await request(app)
       .post('/api/auth/login')
-      .send({ teacherId: await findTeacherId(process.env.ADMIN_NAME!), pin: ADMIN_PIN });
+      .send(await loginBody(await findTeacherId(process.env.ADMIN_NAME!), ADMIN_PIN));
     const cookie = (login.headers['set-cookie'] as unknown as string[])[0].split(';')[0];
     // 서명 쿠키 'dutycal.sid=s:<sid>.<서명>' 에서 sid만 꺼낸다
     const signed = decodeURIComponent(cookie.slice('dutycal.sid='.length));
@@ -218,7 +218,7 @@ describe('월초 자동 백업', () => {
     expect((await admin.get('/api/backup/monthly/monthly-1999-01.db')).status).toBe(404);
 
     const teacher = request.agent(app);
-    await teacher.post('/api/auth/login').send({ teacherId: await findTeacherId('평교사'), pin: '4444' });
+    await teacher.post('/api/auth/login').send(await loginBody(await findTeacherId('평교사'), '4444'));
     expect((await teacher.get('/api/backup/monthly')).status).toBe(403);
   });
 });

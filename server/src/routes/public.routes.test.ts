@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app.js';
-import { findTeacherId } from '../test/helpers.js';
+import { findTeacherId, loginBody } from '../test/helpers.js';
 import { prisma } from '../lib/prisma.js';
 
 const app = createApp();
@@ -20,7 +20,7 @@ beforeAll(async () => {
   admin = request.agent(app);
   await admin
     .post('/api/auth/login')
-    .send({ teacherId: await findTeacherId(process.env.ADMIN_NAME!), pin: process.env.ADMIN_INITIAL_PIN! });
+    .send(await loginBody(await findTeacherId(process.env.ADMIN_NAME!), process.env.ADMIN_INITIAL_PIN!));
 
   const t = await prisma.teacher.create({ data: { name: `배포교사_${Date.now()}`, pinHash: 'x' } });
   teacherName = t.name;
@@ -72,7 +72,7 @@ describe('월별 감독표 배포 API (GET /api/public/duty/:year/:month)', () =
 
   it('로그인 세션으로도 조회할 수 있다', async () => {
     const agent = request.agent(app);
-    await agent.post('/api/auth/login').send({ teacherId: await findTeacherId('평교사'), pin: '4444' });
+    await agent.post('/api/auth/login').send(await loginBody(await findTeacherId('평교사'), '4444'));
     expect((await agent.get(URL)).status).toBe(200);
   });
 
@@ -133,7 +133,7 @@ describe('API 연동 계정 (조회 전용 권한)', () => {
 
   it('연동 계정 관리는 ADMIN만 가능하다', async () => {
     const head = request.agent(app);
-    await head.post('/api/auth/login').send({ teacherId: await findTeacherId('1학년부장'), pin: '1111' });
+    await head.post('/api/auth/login').send(await loginBody(await findTeacherId('1학년부장'), '1111'));
     expect((await head.get('/api/api-clients')).status).toBe(403);
     expect((await head.post('/api/api-clients').send({ name: 'x' })).status).toBe(403);
   });

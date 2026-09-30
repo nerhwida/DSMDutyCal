@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app.js';
-import { findTeacherId } from '../test/helpers.js';
+import { findTeacherId, loginBody } from '../test/helpers.js';
 import { hashPin } from '../auth/pin.js';
 import { prisma } from '../lib/prisma.js';
 import { weekdayOf } from '../lib/dateUtils.js';
@@ -22,13 +22,13 @@ async function newTeacher(prefix: string, grades: number[] = [1]) {
     await prisma.teacherGrade.create({ data: { teacherId: t.id, grade, weekdayOrder: 900 + seq, fridayOrder: 900 + seq } });
   }
   const agent = request.agent(app);
-  await agent.post('/api/auth/login').send({ teacherId: t.id, pin: '1234' });
+  await agent.post('/api/auth/login').send(await loginBody(t.id, '1234'));
   return { id: t.id, name: t.name, agent };
 }
 
 async function loginFixture(name: string, pin: string) {
   const agent = request.agent(app);
-  await agent.post('/api/auth/login').send({ teacherId: await findTeacherId(name), pin });
+  await agent.post('/api/auth/login').send(await loginBody(await findTeacherId(name), pin));
   return agent;
 }
 const adminAgent = () => loginFixture(process.env.ADMIN_NAME!, process.env.ADMIN_INITIAL_PIN!);

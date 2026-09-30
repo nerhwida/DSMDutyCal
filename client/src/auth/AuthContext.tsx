@@ -20,7 +20,7 @@ export function roleLabel(user: AuthUser): string {
 interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
-  login: (teacherId: number, pin: string) => Promise<{ mustChangePin: boolean }>;
+  login: (name: string, pin: string) => Promise<{ mustChangePin: boolean }>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -51,9 +51,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const login = useCallback(
-    async (teacherId: number, pin: string) => {
+    async (name: string, pin: string) => {
       const result = await api.post<{ ok: true; mustChangePin: boolean }>('/api/auth/login', {
-        teacherId,
+        name,
         pin,
       });
       await refresh();

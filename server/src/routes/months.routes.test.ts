@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app.js';
-import { findTeacherId } from '../test/helpers.js';
+import { findTeacherId, loginBody } from '../test/helpers.js';
 import { hashPin } from '../auth/pin.js';
 import { prisma } from '../lib/prisma.js';
 
@@ -12,7 +12,7 @@ const app = createApp();
 
 async function loginAgent(teacherId: number, pin: string) {
   const agent = request.agent(app);
-  await agent.post('/api/auth/login').send({ teacherId, pin });
+  await agent.post('/api/auth/login').send(await loginBody(teacherId, pin));
   return agent;
 }
 
