@@ -29,10 +29,14 @@ const WEEK_HEADER = ['일', '월', '화', '수', '목', '금', '토'];
 const SPECIAL_STYLE: Record<SpecialDayType, string> = {
   MANDATORY_HOME: 'bg-violet-50 text-violet-700',
   HOLIDAY: 'bg-slate-100 text-red-600',
+  VACATION: 'bg-sky-50 text-sky-700',
+  SCHOOL_CLOSURE: 'bg-slate-100 text-slate-700',
   EXAM: 'bg-orange-50 text-orange-700',
   EVENT: 'bg-emerald-50 text-emerald-700',
   OTHER: 'bg-slate-50 text-slate-600',
 };
+
+const REST_DAY_TYPES: SpecialDayType[] = ['HOLIDAY', 'VACATION', 'SCHOOL_CLOSURE'];
 
 const STATUS_BADGE: Record<MonthPlanStatus, string> = {
   EMPTY: 'bg-slate-100 text-slate-500',
@@ -353,7 +357,10 @@ export function CalendarPage() {
                 const specials = index.specials.get(date) ?? [];
                 const fullDay = specials.length > 0 && (weekend || specials.length === 3);
                 const holiday = specials.length === 3 && specials.every((s) => s.type === 'HOLIDAY');
-                const grayed = weekend || holiday;
+                // 방학·재량휴업일(전 학년)도 학교를 쉬는 날이라 회색 배경으로 표시한다.
+                const dayOff =
+                  specials.length === 3 && specials.every((s) => REST_DAY_TYPES.includes(s.type));
+                const grayed = weekend || dayOff;
                 return (
                   <div
                     key={date}

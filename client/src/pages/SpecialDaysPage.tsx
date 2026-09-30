@@ -5,7 +5,7 @@ import { AfterSchoolSection } from '../components/AfterSchoolSection';
 import type { Grade, SpecialDay, SpecialDayType } from '../types';
 import { SPECIAL_DAY_TYPE_LABEL } from '../types';
 
-const TYPES: SpecialDayType[] = ['MANDATORY_HOME', 'HOLIDAY', 'EXAM', 'EVENT', 'OTHER'];
+const TYPES: SpecialDayType[] = ['MANDATORY_HOME', 'HOLIDAY', 'VACATION', 'SCHOOL_CLOSURE', 'EXAM', 'EVENT', 'OTHER'];
 const GRADES: Grade[] = [1, 2, 3];
 
 /** 화면 표시 단위: 같은 날짜·유형·일정명의 학년별 행을 하나로 묶는다. */

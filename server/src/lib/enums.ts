@@ -13,7 +13,7 @@ export type RotationGroup = (typeof ROTATION_GROUPS)[number];
 export const WEEKDAY_EXCLUSION_REASONS = ['AFTER_SCHOOL', 'OTHER'] as const;
 export type WeekdayExclusionReason = (typeof WEEKDAY_EXCLUSION_REASONS)[number];
 
-export const SPECIAL_DAY_TYPES = ['MANDATORY_HOME', 'HOLIDAY', 'EXAM', 'EVENT', 'OTHER'] as const;
+export const SPECIAL_DAY_TYPES = ['MANDATORY_HOME', 'HOLIDAY', 'VACATION', 'SCHOOL_CLOSURE', 'EXAM', 'EVENT', 'OTHER'] as const;
 export type SpecialDayType = (typeof SPECIAL_DAY_TYPES)[number];
 
 export const MONTH_PLAN_STATUSES = ['EMPTY', 'DRAFT', 'CONFIRMED', 'CLOSED'] as const;

@@ -90,6 +90,24 @@ describe('특별 일정 등록 (F3)', () => {
     expect((await prisma.specialDay.findMany({ where: { date } })).map((r) => r.grade)).toEqual([2]);
   });
 
+  it('방학·재량휴업일 유형으로 등록할 수 있다', async () => {
+    const adminId = await findTeacherId(process.env.ADMIN_NAME!);
+    const agent = await loginAgent(adminId, process.env.ADMIN_INITIAL_PIN!);
+
+    const vacation = await agent
+      .post('/api/special-days')
+      .send({ startDate: '2039-07-25', endDate: '2039-07-26', type: 'VACATION', title: '여름방학' });
+    expect(vacation.status).toBe(201);
+    const closure = await agent
+      .post('/api/special-days')
+      .send({ date: '2039-07-27', type: 'SCHOOL_CLOSURE', title: '재량휴업일' });
+    expect(closure.status).toBe(201);
+
+    const rows = await prisma.specialDay.findMany({ where: { date: { gte: '2039-07-25', lte: '2039-07-27' } } });
+    expect(rows.filter((r) => r.type === 'VACATION')).toHaveLength(6); // 2일 × 3개 학년
+    expect(rows.filter((r) => r.type === 'SCHOOL_CLOSURE')).toHaveLength(3);
+  });
+
   it('이미 배정이 있는 날짜에 등록하면 경고 후, 확인 시 배정이 삭제된다', async () => {
     const adminId = await findTeacherId(process.env.ADMIN_NAME!);
     const teacherId = await findTeacherId('평교사');

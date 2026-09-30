@@ -1,11 +1,13 @@
 export type Grade = 1 | 2 | 3;
 export type RotationGroup = 'WEEKDAY' | 'FRIDAY';
 export type WeekdayExclusionReason = 'AFTER_SCHOOL' | 'OTHER';
-export type SpecialDayType = 'MANDATORY_HOME' | 'HOLIDAY' | 'EXAM' | 'EVENT' | 'OTHER';
+export type SpecialDayType = 'MANDATORY_HOME' | 'HOLIDAY' | 'VACATION' | 'SCHOOL_CLOSURE' | 'EXAM' | 'EVENT' | 'OTHER';
 
 export const SPECIAL_DAY_TYPE_LABEL: Record<SpecialDayType, string> = {
   MANDATORY_HOME: '의무귀가',
   HOLIDAY: '공휴일',
+  VACATION: '방학',
+  SCHOOL_CLOSURE: '재량휴업일',
   EXAM: '시험',
   EVENT: '행사',
   OTHER: '기타',
