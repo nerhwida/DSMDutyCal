@@ -32,10 +32,11 @@ export function HomePage() {
   const tabs: { key: Tab; label: string; visible: boolean }[] = [
     { key: 'calendar', label: '월간 달력', visible: true },
     { key: 'my-duty', label: '내 감독', visible: true },
-    { key: 'stats', label: '통계', visible: true },
+    // 일반 교사에게는 통계·일정 관리 탭을 보여 주지 않는다
+    { key: 'stats', label: '통계', visible: canManageTeachers },
     { key: 'history', label: '변경 이력', visible: true },
     { key: 'teachers', label: '교사 관리', visible: canManageTeachers },
-    { key: 'special-days', label: '일정 관리', visible: true },
+    { key: 'special-days', label: '일정 관리', visible: canManageTeachers },
     { key: 'initial-counts', label: '초기 누계', visible: user.isAdmin },
     { key: 'api-clients', label: 'API 연동', visible: user.isAdmin },
     { key: 'settings', label: '설정', visible: user.isAdmin },
@@ -79,10 +80,10 @@ export function HomePage() {
       <main className="p-6 print:p-0">
         {tab === 'calendar' && <CalendarPage />}
         {tab === 'my-duty' && <MyDutyPage />}
-        {tab === 'stats' && <StatsPage />}
+        {tab === 'stats' && canManageTeachers && <StatsPage />}
         {tab === 'history' && <HistoryPage />}
         {tab === 'teachers' && canManageTeachers && <TeacherManagementPage />}
-        {tab === 'special-days' && <SpecialDaysPage />}
+        {tab === 'special-days' && canManageTeachers && <SpecialDaysPage />}
         {tab === 'initial-counts' && user.isAdmin && <InitialCountsPage />}
         {tab === 'api-clients' && user.isAdmin && <ApiClientsPage />}
         {tab === 'settings' && user.isAdmin && <SettingsPage />}
