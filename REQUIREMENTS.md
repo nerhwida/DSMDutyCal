@@ -25,6 +25,16 @@
 | 구체화 | **백업/복원 방식**: 백업은 실행 중 스냅샷 다운로드, 복원은 업로드 → 검증 → 재시작 시 적용(직전 DB 자동 보관, 오래된 백업은 자동 마이그레이션). | F11, §7 |
 | 추가 | **월초 자동 백업**: 매달 1일 전월 기준 백업을 서버에 생성, 24개월 보관, 설정 화면에서 다운로드. | F11, §7 |
 | 추가 | **MIT 라이선스** (공개 저장소). | — |
+
+### 2026-09-30 개정
+
+| 구분 | 변경 내용 | 관련 절 |
+|---|---|---|
+| 변경 | **학년부장도 특별 일정 관리** (모든 학년, 등록·수정·삭제·공휴일 시드). 기존: 관리자만. | F1-1, F3, §7 |
+| 추가 | 특별 일정 **수정** 기능 (날짜·유형·일정명·감독 제외 학년, 묶음 단위). | F3, §7 |
+| 추가 | **방과후 운영일** (학교 전체, 관리자·학년부장 입력). | §4 AfterSchoolDay, F3, §7 |
+| 변경 | 교사의 **방과후 요일은 방과후 운영일에만 감독 제외**로 적용 (시험 기간 등 미운영일에는 감독 가능). 기존: 그 요일 항상 제외. | 가정 2, F2, 6.2 |
+| 변경 | 달력 글씨 크기 확대 (화면만, 인쇄는 A4 1페이지 유지). | F5 |
 | 추가 | **로그인 세션을 DB에 저장** (재시작·업데이트 후에도 로그인 유지). | §4 Session, §8 |
 | 보류 | `/api/settings`(시스템 설정)는 정의된 설정 항목이 없어 구현하지 않음. 설정 화면은 백업/복원만 제공. | §7 |
 
@@ -150,6 +160,11 @@ SQLite는 Prisma 네이티브 `enum`을 지원하지 않으므로 enum 성격의
 ### TeacherWeekdayExclusion (요일 제외 / 방과후 수업)
 - `teacherId`, `weekday (1=월 … 5=금)`, `reason ('AFTER_SCHOOL' | 'OTHER')`
 - 예: 김교사 월·수 방과후 → 두 행.
+- `AFTER_SCHOOL`은 **방과후 운영일(AfterSchoolDay)에 해당하는 날에만** 감독 제외. `OTHER`는 그 요일 항상 제외. *(개정)*
+
+### AfterSchoolDay (방과후 운영일) *(추가)*
+- `date (UNIQUE)` — 학교 전체의 방과후 수업 운영일. 기간 단위로 등록하고(평일만), 시험 기간 등은 기간 단위로 제외한다.
+- 관리자·학년부장이 관리, 모든 교사 조회.
 
 ### TeacherUnavailableDate (감독 불가일)
 - `teacherId`, `date`, `reason (String, 출장/연수/개인 등)`
@@ -224,7 +239,7 @@ SQLite는 Prisma 네이티브 `enum`을 지원하지 않으므로 enum 성격의
 |---|---|---|---|---|
 | 전체 감독표 조회 | ✅ | ✅ | ✅ | ✅ |
 | 교사 관리·학년부장 지정·PIN 초기화 | ✅ | ❌ | ❌ | ❌ |
-| 특별 일정 관리 | ✅ | ❌ (조회만) | ❌ | ❌ |
+| 특별 일정·방과후 운영일 관리 *(개정)* | ✅ | ✅ (모든 학년) | ✅ (모든 학년) | ❌ (조회만) |
 | 담당 학년 교사의 학년 감독 가능 여부·순환 순서 | ✅ | ✅ | ❌ | ❌ |
 | 자동 편성·재편성·확정 | ✅ (전 학년) | ✅ | ❌ | ❌ |
 | 월 마감 / 마감 해제 | ✅ / ✅ | ✅ / ❌ | ❌ | ❌ |
@@ -302,7 +317,12 @@ SQLite는 Prisma 네이티브 `enum`을 지원하지 않으므로 enum 성격의
 - 초기 누계 입력 화면 (교사 × 학년 × 순환그룹).
 
 ### F3. 일정 관리 *(개정)*
+- 권한: 관리자·학년부장 (학년부장은 모든 학년 일정 관리). 일반 교사는 조회만.
 - 특별 일정(의무귀가, 공휴일, 시험, 행사, 기타) 등록/수정/삭제.
+  - **수정**: 목록의 일정 1건(같은 날짜·유형·일정명의 학년별 행 묶음)을 날짜·유형·일정명·감독 제외 학년 단위로 수정한다.
+    새로 제외되는 날짜·학년에 배정이 있으면 등록과 같은 경고 절차를 거친다. 제외에서 빠진 학년은 다시 운영일이 된다.
+- **방과후 운영일** *(추가)*: 방과후 수업이 열리는 기간을 등록(기간 안의 평일)하고, 시험 기간 등은 기간 단위로 제외한다.
+  교사의 방과후 요일은 이 운영일에만 감독 제외로 적용된다. 달력에는 운영일에 `방과후` 표시.
 - 기간 등록 지원 (예: 시험 10/20~10/23 → 날짜별로 저장).
 - **감독 제외 학년 선택** (기본: 전 학년). 체크한 학년만 해당 날짜에 편성하지 않는다.
   - 예: 2학년 수학여행 → 2학년만 체크 → 1·3학년은 그날도 정상 편성
@@ -456,7 +476,7 @@ interface HardRule {       // 후보 제외 규칙
 |---|---|
 | GradeEligibility | 해당 학년 감독 가능 교사만 |
 | FridayEligibility | 금요일은 `canFriday=true`, 월~목은 `canWeekday=true` |
-| WeekdayExclusion | 방과후 수업 등 요일 제외 |
+| WeekdayExclusion | 요일 제외. 방과후 수업은 **방과후 운영일에만**, 기타 사유는 항상 *(개정)* |
 | UnavailableDate | 감독 불가일 |
 | OnePerDay | 같은 날 다른 학년에 이미 배정된 교사 제외 |
 | ActiveOnly | 비활성 교사 제외 |
@@ -492,7 +512,8 @@ interface HardRule {       // 후보 제외 규칙
 **Scheduler**
 - 특별 일정일에는 배정이 생성되지 않는다.
 - 학년 단위 특별 일정일에는 해당 학년만 배정되지 않고 다른 학년은 배정된다. *(추가)*
-- 방과후 요일에 해당 교사가 배정되지 않는다.
+- 방과후 요일에 해당 교사가 배정되지 않는다 (방과후 운영일).
+- 방과후 운영일이 아닌 날에는 방과후 요일 교사도 배정될 수 있다. *(추가)*
 - 같은 날 한 교사가 두 학년에 배정되지 않는다.
 - 금요일과 월~목 순번이 서로 영향을 주지 않는다.
 - 제약이 없을 때 한 달 편성 결과의 학년·그룹별 편차가 1 이하이다.
@@ -539,10 +560,14 @@ interface HardRule {       // 후보 제외 규칙
 | PUT | /api/teachers/:id/weekday-exclusions | 방과후 요일 | 본인, ADMIN |
 | GET/PUT | /api/initial-counts | 초기 누계 | ADMIN |
 | GET | /api/special-days | 특별 일정 조회 (날짜 × 학년 행) | 로그인 |
-| POST | /api/special-days | 특별 일정 등록 `{date 또는 startDate~endDate, type, title, grades?, confirmDeleteAssignments?}` | ADMIN |
-| PUT/DELETE | /api/special-days/:id | 특별 일정 1행 수정·삭제 | ADMIN |
-| DELETE | /api/special-days?ids= | 특별 일정 여러 행 삭제 (화면의 일정 1건) | ADMIN |
-| POST | /api/special-days/seed-holidays | 연도별 공휴일 시드 (전 학년) | ADMIN |
+| POST | /api/special-days | 특별 일정 등록 `{date 또는 startDate~endDate, type, title, grades?, confirmDeleteAssignments?}` | ADMIN, 학년부장 |
+| PUT | /api/special-days/group | 일정 1건(묶음) 수정 `{ids, date, type, title, grades, confirmDeleteAssignments?}` | ADMIN, 학년부장 |
+| PUT/DELETE | /api/special-days/:id | 특별 일정 1행 수정·삭제 | ADMIN, 학년부장 |
+| DELETE | /api/special-days?ids= | 특별 일정 여러 행 삭제 (화면의 일정 1건) | ADMIN, 학년부장 |
+| POST | /api/special-days/seed-holidays | 연도별 공휴일 시드 (전 학년) | ADMIN, 학년부장 |
+| GET | /api/after-school-days?from=&to= | 방과후 운영일 목록 | 로그인 |
+| POST | /api/after-school-days | 운영 기간 등록 `{startDate, endDate?}` (평일만) | ADMIN, 학년부장 |
+| DELETE | /api/after-school-days?from=&to= | 기간 안의 운영일 제외 | ADMIN, 학년부장 |
 | GET | /api/months/:year/:month | 달력 데이터 (DRAFT는 권한자만 포함) | 로그인 |
 | POST | /api/months/:year/:month/grades/:grade/generate | 자동 편성 미리보기 | ADMIN, 해당 학년부장 |
 | POST | /api/months/:year/:month/grades/:grade/confirm | 확정 | ADMIN, 해당 학년부장 |

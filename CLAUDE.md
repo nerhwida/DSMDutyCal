@@ -144,6 +144,18 @@ $env:NODE_OPTIONS = "--use-system-ca"
   준다. `type`은 전 학년 제외면 `SPECIAL`, 일부만 제외면 `OPERATING`이며 제외 학년의 `duty`는 null이다.
   (이전 `specialDay` 단일 객체는 없어졌다.)
 
+### 일정 관리 권한과 방과후 운영일 (2026-09-30)
+- 특별 일정과 방과후 운영일은 **ADMIN + 학년부장(모든 학년)** 이 관리한다 (`requireScheduleManager` =
+  `gradeHeadOf.length > 0`). 원래 명세는 ADMIN 전용이었는데 오너 요청으로 바꿨다.
+- 특별 일정 수정은 화면의 "일정 1건"(같은 날짜·유형·일정명 묶음) 단위로 한다: `PUT /api/special-days/group`
+  (`/:id`보다 먼저 등록해야 한다). 등록과 수정은 `saveSpecialDays()`를 함께 쓴다. 이 함수가 충돌 경고, 마감 월
+  차단, 기존 행 교체를 한 트랜잭션으로 처리한다.
+- **방과후 운영일**(`AfterSchoolDay`, 학교 전체)
+  - 교사의 `AFTER_SCHOOL` 요일 제외는 `ScheduleContext.afterSchoolDay`가 true인 날에만 적용된다. `OTHER`는 항상 적용된다.
+  - 따라서 **운영일이 하나도 없으면 방과후 교사도 모든 날 배정된다.** 운영 전에 운영일을 등록해야 한다.
+  - `ScheduleContext`를 만드는 곳은 모두 운영일 여부를 넣어야 한다: 엔진, `assignmentService.evaluateTeachers`,
+    `getMonthView`의 미배정 사유. 필수 필드라 tsc가 알려 준다.
+
 ### 순번 모델 (중요하고 드러나지 않는 설계 결정)
 REQUIREMENTS.md의 데이터 모델(§4)에는 `Teacher.sortOrder` 하나만 있다. 그런데 §5(F2)는
 **학년 × 순환 그룹**(월~목 / 금요일)별로 독립적인 드래그 앤 드롭 순번을 요구하고, §3 가정 5는
