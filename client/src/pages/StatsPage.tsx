@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
 import { todayInSeoul } from '../lib/date';
 import { GROUP_LABEL, type Grade, type RangeStats } from '../types';
 
@@ -25,6 +26,9 @@ function presets(schoolYear: number) {
 
 /** F7 통계: 기간 선택(학기 프리셋 + 직접 선택), 교사 × 학년 표, 공정성 지표. */
 export function StatsPage() {
+  const { user } = useAuth();
+  // 공정성 지표는 관리자에게만 보여 준다
+  const showFairness = !!user?.isAdmin;
   const [schoolYear, setSchoolYear] = useState(currentSchoolYear);
   const [range, setRange] = useState(() => presets(currentSchoolYear())[2]);
   const [gradeFilter, setGradeFilter] = useState<Grade | null>(null);
@@ -206,38 +210,40 @@ export function StatsPage() {
             </table>
           </div>
 
-          <div className="rounded border border-slate-200 bg-white">
-            <h3 className="border-b border-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">공정성 지표</h3>
-            <table className="w-full text-xs">
-              <thead className="text-slate-500">
-                <tr>
-                  <th className="px-3 py-1 text-left">학년·그룹</th>
-                  <th className="px-3 py-1">기간 최대 / 최소 / 편차</th>
-                  <th className="px-3 py-1">누계 최대 / 최소 / 편차</th>
-                </tr>
-              </thead>
-              <tbody>
-                {fairness.map((f) => (
-                  <tr key={`${f.grade}-${f.group}`} className="border-t border-slate-100 text-center">
-                    <td className="px-3 py-1 text-left">
-                      {f.grade}학년 {GROUP_LABEL[f.group]}
-                    </td>
-                    <td className={`px-3 py-1 ${f.period.warning ? 'text-red-600' : ''}`}>
-                      {f.period.max} / {f.period.min} / {f.period.deviation}
-                      {f.period.warning && ' ⚠'}
-                    </td>
-                    <td className={`px-3 py-1 ${f.total.warning ? 'text-red-600' : ''}`}>
-                      {f.total.max} / {f.total.min} / {f.total.deviation}
-                      {f.total.warning && ' ⚠'}
-                    </td>
+          {showFairness && (
+            <div className="rounded border border-slate-200 bg-white">
+              <h3 className="border-b border-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">공정성 지표</h3>
+              <table className="w-full text-xs">
+                <thead className="text-slate-500">
+                  <tr>
+                    <th className="px-3 py-1 text-left">학년·그룹</th>
+                    <th className="px-3 py-1">기간 최대 / 최소 / 편차</th>
+                    <th className="px-3 py-1">누계 최대 / 최소 / 편차</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-            <p className="border-t border-slate-100 px-3 py-1 text-[11px] text-slate-400">
-              해당 학년·그룹 감독이 가능한 활성 교사 기준 (기간 중 통계 제외 월이 있는 교사 제외) · 편차 2 이상이면 ⚠
-            </p>
-          </div>
+                </thead>
+                <tbody>
+                  {fairness.map((f) => (
+                    <tr key={`${f.grade}-${f.group}`} className="border-t border-slate-100 text-center">
+                      <td className="px-3 py-1 text-left">
+                        {f.grade}학년 {GROUP_LABEL[f.group]}
+                      </td>
+                      <td className={`px-3 py-1 ${f.period.warning ? 'text-red-600' : ''}`}>
+                        {f.period.max} / {f.period.min} / {f.period.deviation}
+                        {f.period.warning && ' ⚠'}
+                      </td>
+                      <td className={`px-3 py-1 ${f.total.warning ? 'text-red-600' : ''}`}>
+                        {f.total.max} / {f.total.min} / {f.total.deviation}
+                        {f.total.warning && ' ⚠'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="border-t border-slate-100 px-3 py-1 text-[11px] text-slate-400">
+                해당 학년·그룹 감독이 가능한 활성 교사 기준 (기간 중 통계 제외 월이 있는 교사 제외) · 편차 2 이상이면 ⚠
+              </p>
+            </div>
+          )}
         </>
       )}
     </div>

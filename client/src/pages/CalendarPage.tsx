@@ -365,7 +365,7 @@ export function CalendarPage() {
 
       <div className="space-y-3 print:hidden">
         {error && <p className="text-sm text-red-600">{error}</p>}
-        {result && <GenerateSummary result={result} onClose={() => setResult(null)} />}
+        {result && <GenerateSummary result={result} showFairness={user.isAdmin} onClose={() => setResult(null)} />}
         {regenResult && <RegenerateSummary result={regenResult} onClose={() => setRegenResult(null)} />}
       </div>
 
@@ -707,9 +707,18 @@ function RegenerateSummary({ result, onClose }: { result: RegenerateResult; onCl
   );
 }
 
-/** 편성 완료 후 공정성 요약 + 미배정 사유 (F4). */
-function GenerateSummary({ result, onClose }: { result: GenerateResult; onClose: () => void }) {
-  const warned = result.fairness.some((f) => f.warning);
+/** 편성 완료 요약 + 미배정 사유 (F4). 공정성 요약은 관리자에게만. */
+function GenerateSummary({
+  result,
+  showFairness,
+  onClose,
+}: {
+  result: GenerateResult;
+  /** 공정성 요약은 관리자에게만 */
+  showFairness: boolean;
+  onClose: () => void;
+}) {
+  const warned = showFairness && result.fairness.some((f) => f.warning);
   return (
     <div className={`rounded border p-3 text-sm ${warned || result.warnings.length > 0 ? 'border-amber-300 bg-amber-50' : 'border-emerald-300 bg-emerald-50'}`}>
       <div className="flex items-start justify-between">
@@ -721,14 +730,16 @@ function GenerateSummary({ result, onClose }: { result: GenerateResult; onClose:
           닫기 ✕
         </button>
       </div>
-      <ul className="mt-1 text-xs text-slate-700">
-        {result.fairness.map((f) => (
-          <li key={f.group} className={f.warning ? 'text-red-600' : ''}>
-            {GROUP_LABEL[f.group]}: 이번 달 최대 {f.monthMax} / 최소 {f.monthMin} (편차 {f.monthDeviation}), 누계 편차 {f.totalDeviation}
-            {f.warning && ' ⚠ 편차 2 이상'}
-          </li>
-        ))}
-      </ul>
+      {showFairness && (
+        <ul className="mt-1 text-xs text-slate-700">
+          {result.fairness.map((f) => (
+            <li key={f.group} className={f.warning ? 'text-red-600' : ''}>
+              {GROUP_LABEL[f.group]}: 이번 달 최대 {f.monthMax} / 최소 {f.monthMin} (편차 {f.monthDeviation}), 누계 편차 {f.totalDeviation}
+              {f.warning && ' ⚠ 편차 2 이상'}
+            </li>
+          ))}
+        </ul>
+      )}
       {result.warnings.length > 0 && (
         <details className="mt-1 text-xs text-red-700">
           <summary className="cursor-pointer">미배정 사유 보기</summary>
