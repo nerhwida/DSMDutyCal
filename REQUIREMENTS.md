@@ -40,6 +40,7 @@
 | 변경 | **로그인은 이름 직접 입력 + PIN** (관리자 포함). 로그인 화면에 교사 목록을 노출하지 않으며 `GET /api/auth/teachers`는 삭제. 동명이인은 PIN으로 구분한다. 기존: 이름 선택. | 가정 9, §7 |
 | 변경 | 교사 관리 목록은 **관리자 먼저, 이후 이름 오름차순**으로 표시. | F2 |
 | 변경 | 일정 관리 화면에서 **방과후 운영일을 특별 일정 등록 위**에 배치. | F3 |
+| 추가 | **전체 PIN 일괄 초기화** (관리자, 교사 관리 화면): 관리자를 뺀 교사 전원의 PIN을 같은 값(기본 0000)으로 바꾸고 다음 로그인 때 변경 강제. PIN 변경 시 새 PIN은 현재 PIN과 달라야 한다. | F2, §7 |
 | 추가 | **방과후 보강** 탭 (F13): 왼쪽 방과후 휴강·자습 현황(날짜/강좌명/담당 교사명/인원/자습 장소/비고) 누적 입력·수정, 오른쪽 보강 계획 참고 사항(한 줄 글). 누구나 등록, 수정·삭제는 작성자·관리자·학년부장. | F13, §4, §7 |
 | 변경 | 감독표 배포 API의 감독 교사에서 `teacherId`를 빼고 `name`만 제공. 월별 응답에서 `generatedAt`·`grades`, 일별 응답에서 `type`을 뺀다. | F12 |
 | 추가 | 감독표 배포 **일별 API** `GET /api/public/duty/:year/:month/:day` (월별 응답의 하루치와 같은 형식). | F12, §7 |
@@ -609,6 +610,7 @@ interface HardRule {       // 후보 제외 규칙
 | PUT | /api/auth/pin | 본인 PIN 변경 | 로그인 |
 | GET/POST/PUT/DELETE | /api/teachers | 교사 CRUD | ADMIN (조회는 로그인) |
 | POST | /api/teachers/:id/reset-pin | PIN 초기화 | ADMIN |
+| POST | /api/teachers/reset-pin-all | 관리자를 뺀 교사 전원 PIN 일괄 초기화 `{newPin='0000', adminPin}` (다음 로그인 때 변경 강제) | ADMIN (본인 PIN 재확인) |
 | PUT | /api/grade-heads/:grade | 학년부장 지정 | ADMIN |
 | PUT | /api/teachers/:id/grades | 학년 감독 가능 여부 | ADMIN, 해당 학년부장 |
 | PUT | /api/grades/:grade/order | 순환 순서 변경 `{rotationGroup, teacherIds}` | ADMIN, 해당 학년부장 |
