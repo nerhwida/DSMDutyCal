@@ -494,7 +494,7 @@ export function CalendarPage() {
                                 className={`${base} bg-teal-50/60 text-teal-700`}
                               >
                                 <span className="w-3 opacity-70">{g}</span>
-                                <span className="truncate">방과후 · 자습 없음</span>
+                                <span className="truncate">방과후</span>
                               </div>
                             );
                           }
