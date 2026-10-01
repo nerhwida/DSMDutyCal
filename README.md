@@ -201,10 +201,10 @@ X-API-Key: dcf_xxxxxxxxxxxxxxxx
   "grades": [{ "grade": 1, "status": "CONFIRMED", "published": true }, "..."],
   "days": [
     { "date": "2026-10-01", "weekday": "목", "type": "OPERATING",
-      "duty": { "1": { "teacherId": 3, "name": "김○○" }, "2": null, "3": null } },
+      "duty": { "1": { "name": "김○○" }, "2": null, "3": null } },
     { "date": "2026-10-14", "weekday": "수", "type": "OPERATING",
       "specialDays": [{ "grade": 2, "type": "EVENT", "title": "2학년 수학여행" }],
-      "duty": { "1": { "teacherId": 5, "name": "이○○" }, "2": null, "3": { "teacherId": 9, "name": "박○○" } } },
+      "duty": { "1": { "name": "이○○" }, "2": null, "3": { "name": "박○○" } } },
     { "date": "2026-10-09", "weekday": "금", "type": "SPECIAL",
       "specialDays": [{ "grade": 1, "type": "HOLIDAY", "title": "한글날" }, "..."] }
   ]
@@ -221,7 +221,7 @@ X-API-Key: dcf_xxxxxxxxxxxxxxxx
 ```json
 { "date": "2026-10-14", "weekday": "수", "type": "OPERATING",
   "specialDays": [{ "grade": 2, "type": "EVENT", "title": "2학년 수학여행" }],
-  "duty": { "1": { "teacherId": 5, "name": "이○○" }, "2": null, "3": { "teacherId": 9, "name": "박○○" } } }
+  "duty": { "1": { "name": "이○○" }, "2": null, "3": { "name": "박○○" } } }
 ```
 
 - **확정·마감된 학년만 공개**하고, 미리보기(편성 중) 학년은 `null`입니다.

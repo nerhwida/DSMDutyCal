@@ -62,7 +62,7 @@ describe('월별 감독표 배포 API (GET /api/public/duty/:year/:month)', () =
       weekday: '월',
       type: 'OPERATING',
       specialDays: [{ grade: 2, type: 'EVENT', title: '2학년 수학여행' }],
-      duty: { '1': { teacherId: expect.any(Number), name: teacherName }, '2': null, '3': null },
+      duty: { '1': { name: teacherName }, '2': null, '3': null },
     });
     expect(byDate.get('2032-03-03')).toMatchObject({ type: 'SPECIAL' });
     expect((byDate.get('2032-03-03') as { specialDays: unknown[] }).specialDays).toHaveLength(3);
@@ -79,7 +79,7 @@ describe('월별 감독표 배포 API (GET /api/public/duty/:year/:month)', () =
       weekday: '월',
       type: 'OPERATING',
       specialDays: [{ grade: 2, type: 'EVENT', title: '2학년 수학여행' }],
-      duty: { '1': { teacherId: expect.any(Number), name: teacherName }, '2': null, '3': null },
+      duty: { '1': { name: teacherName }, '2': null, '3': null },
     });
     expect((await request(app).get('/api/public/duty/2032/3/6').set('X-API-Key', key)).body).toEqual({
       date: '2032-03-06',
@@ -112,7 +112,7 @@ describe('월별 감독표 배포 API (GET /api/public/duty/:year/:month)', () =
     const res = await admin.get('/api/public/duty/2032/4');
     const day = res.body.days.find((d: { date: string }) => d.date === '2032-04-05');
     expect(day.afterSchoolGrades).toEqual([1]);
-    expect(day.duty).toEqual({ '1': { teacherId: t.id, name: t.name }, '2': null, '3': null });
+    expect(day.duty).toEqual({ '1': { name: t.name }, '2': null, '3': null });
     expect(res.body.days.find((d: { date: string }) => d.date === '2032-04-06').afterSchoolGrades).toBeUndefined();
   });
 

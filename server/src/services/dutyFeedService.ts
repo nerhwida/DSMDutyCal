@@ -9,7 +9,8 @@ const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토'];
 /** 공개 대상 상태: 확정·마감만. DRAFT(미리보기)는 호출자와 무관하게 내보내지 않는다. */
 const PUBLISHED: MonthPlanStatus[] = ['CONFIRMED', 'CLOSED'];
 
-type DutyTeacher = { teacherId: number; name: string } | null;
+/** 외부에는 교사 이름만 내보낸다 (내부 id는 공개하지 않음). */
+type DutyTeacher = { name: string } | null;
 
 /**
  * 월별 감독표 배포용 JSON (외부 시스템 연동).
@@ -46,7 +47,7 @@ export async function getDutyFeed(year: number, month: number) {
   const dutyByKey = new Map(
     assignments
       .filter((a) => published.has(a.grade))
-      .map((a) => [`${a.date}:${a.grade}`, { teacherId: a.teacherId, name: a.teacher.name }]),
+      .map((a) => [`${a.date}:${a.grade}`, { name: a.teacher.name }]),
   );
 
   const days = dateRange(start, end).map((date) => {
