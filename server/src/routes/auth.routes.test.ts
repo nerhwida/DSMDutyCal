@@ -136,6 +136,17 @@ describe('인증 없이 보호된 API 접근', () => {
 });
 
 describe('PUT /api/auth/pin', () => {
+  it('새 PIN이 현재 PIN과 같으면 400 (초기화 PIN을 그대로 쓰지 못한다)', async () => {
+    const teacher = await prisma.teacher.create({
+      data: { name: `같은PIN변경_${Date.now()}`, pinHash: await hashPin('0000'), mustChangePin: true },
+    });
+    const agent = request.agent(app);
+    await agent.post('/api/auth/login').send({ name: teacher.name, pin: '0000' });
+    const res = await agent.put('/api/auth/pin').send({ currentPin: '0000', newPin: '0000' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('새 PIN은 현재 PIN과 달라야 합니다.');
+  });
+
   it('최초 로그인 시 PIN 변경을 강제한다 (mustChangePin)', async () => {
     const teacher = await prisma.teacher.create({
       data: {

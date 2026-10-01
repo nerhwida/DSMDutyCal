@@ -186,3 +186,37 @@ describe('순환 순서 변경', () => {
     expect(h.weekdayOrder).toBe(2);
   });
 });
+
+describe('POST /api/teachers/reset-pin-all', () => {
+  it('관리자 PIN을 확인한 뒤 관리자를 뺀 교사 전원의 PIN을 0000으로 바꾸고 변경을 강제한다', async () => {
+    const adminId = await findTeacherId(process.env.ADMIN_NAME!);
+    const admin = await loginAgent(adminId, process.env.ADMIN_INITIAL_PIN!);
+    const teacher = await loginAgent(await findTeacherId('평교사'), '4444');
+
+    const adminPin = process.env.ADMIN_INITIAL_PIN!;
+    const wrongPin = adminPin === '1357' ? '2468' : '1357';
+    // 공용 픽스처의 PIN까지 바뀔 수 있으므로 모든 요청을 되돌리는 구간 안에서 한다
+    const snapshot = await prisma.teacher.findMany({ select: { id: true, pinHash: true, mustChangePin: true } });
+    try {
+      // 권한·검증: 일반 교사 403, 관리자 PIN 틀림 401, PIN 형식 오류 400 (이때는 아무것도 바뀌지 않는다)
+      expect((await teacher.post('/api/teachers/reset-pin-all').send({ adminPin: '4444' })).status).toBe(403);
+      expect((await admin.post('/api/teachers/reset-pin-all').send({ adminPin: wrongPin })).status).toBe(401);
+      expect((await admin.post('/api/teachers/reset-pin-all').send({ newPin: '12', adminPin })).status).toBe(400);
+      expect((await request(app).post('/api/auth/login').send({ name: '평교사', pin: '4444' })).status).toBe(200);
+
+      const res = await admin.post('/api/teachers/reset-pin-all').send({ adminPin });
+      expect(res.status).toBe(200);
+      expect(res.body.count).toBe(await prisma.teacher.count({ where: { isAdmin: false } }));
+
+      // 일반 교사는 0000으로 로그인되고 변경이 강제된다. 관리자 PIN은 그대로.
+      const login = await request(app).post('/api/auth/login').send({ name: '평교사', pin: '0000' });
+      expect(login.status).toBe(200);
+      expect(login.body.mustChangePin).toBe(true);
+      expect((await request(app).post('/api/auth/login').send({ name: process.env.ADMIN_NAME, pin: adminPin })).body.mustChangePin).toBe(false);
+    } finally {
+      for (const t of snapshot) {
+        await prisma.teacher.update({ where: { id: t.id }, data: { pinHash: t.pinHash, mustChangePin: t.mustChangePin } });
+      }
+    }
+  });
+});

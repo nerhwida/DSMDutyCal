@@ -79,6 +79,10 @@ authRouter.put('/pin', requireAuth, async (req, res) => {
   if (!valid) {
     return res.status(401).json({ error: '현재 PIN이 올바르지 않습니다.' });
   }
+  // 초기화 PIN(예: 0000)을 그대로 쓰지 못하게 한다
+  if (parsed.data.newPin === parsed.data.currentPin) {
+    return res.status(400).json({ error: '새 PIN은 현재 PIN과 달라야 합니다.' });
+  }
 
   const pinHash = await hashPin(parsed.data.newPin);
   await prisma.teacher.update({

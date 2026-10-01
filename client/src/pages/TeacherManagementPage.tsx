@@ -332,6 +332,8 @@ export function TeacherManagementPage() {
         )}
       </div>
 
+      {user.isAdmin && <ResetAllPinsPanel onDone={(msg) => { setNotice(msg); load(); }} onError={setError} />}
+
       {user.isAdmin && (
         <div>
           <h3 className="mb-2 text-sm font-semibold text-slate-800">학년부장 지정</h3>
@@ -555,6 +557,73 @@ function StatsExclusionPanel({
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** 관리자를 뺀 교사 전원의 PIN 일괄 초기화 (서비스 안내용). 관리자 본인 PIN으로 다시 확인한다. */
+function ResetAllPinsPanel({ onDone, onError }: { onDone: (message: string) => void; onError: (message: string) => void }) {
+  const [newPin, setNewPin] = useState('0000');
+  const [adminPin, setAdminPin] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (
+      !window.confirm(
+        `관리자를 뺀 모든 교사의 PIN을 ${newPin}(으)로 초기화합니다. 각 교사는 다음 로그인 때 PIN을 바꿔야 합니다. 계속할까요?`,
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await api.post<{ ok: true; count: number }>('/api/teachers/reset-pin-all', { newPin, adminPin });
+      setAdminPin('');
+      onDone(`교사 ${res.count}명의 PIN을 ${newPin}(으)로 초기화했습니다. 각자 첫 로그인 때 새 PIN으로 바꾸게 됩니다.`);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'PIN 일괄 초기화에 실패했습니다.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      <h3 className="mb-1 text-sm font-semibold text-slate-800">전체 PIN 일괄 초기화</h3>
+      <p className="mb-2 text-xs text-slate-500">
+        관리자를 뺀 교사 전원의 PIN을 같은 값으로 바꾸고, 다음 로그인 때 새 PIN으로 바꾸도록 합니다(같은 PIN은 다시 쓸 수 없음).
+        초기화한 동안에는 이름만 알면 누구나 그 교사로 로그인할 수 있으니, 안내 후 바로 바꾸도록 해 주세요.
+      </p>
+      <form onSubmit={submit} className="flex flex-wrap items-end gap-2">
+        <div>
+          <label className="block text-xs text-slate-500">초기화 PIN</label>
+          <input
+            value={newPin}
+            onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))}
+            maxLength={6}
+            className="w-24 rounded border border-slate-300 px-2 py-1 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-slate-500">관리자 본인 PIN 확인</label>
+          <input
+            type="password"
+            inputMode="numeric"
+            value={adminPin}
+            onChange={(e) => setAdminPin(e.target.value.replace(/\D/g, ''))}
+            maxLength={6}
+            className="w-28 rounded border border-slate-300 px-2 py-1 text-sm"
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={busy || !/^\d{4,6}$/.test(newPin) || !adminPin}
+          className="rounded border border-red-400 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50 disabled:opacity-40"
+        >
+          전체 초기화
+        </button>
+      </form>
     </div>
   );
 }

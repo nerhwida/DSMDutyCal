@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
-import { hashPin } from '../auth/pin.js';
+import { hashPin, verifyPin } from '../auth/pin.js';
 import { recordAudit } from '../lib/audit.js';
 import {
   dateRangeQuerySchema,
@@ -122,6 +122,35 @@ teachersRouter.delete('/:id', requireAdmin, async (req, res) => {
 });
 
 const resetPinSchema = z.object({ newPin: pinSchema.optional() });
+
+const resetAllSchema = z.object({
+  newPin: pinSchema.default('0000'),
+  adminPin: z.string().min(1, '관리자 PIN을 입력해주세요.'),
+});
+
+/**
+ * POST /api/teachers/reset-pin-all — 관리자를 뺀 교사 전원의 PIN을 같은 값(기본 0000)으로 초기화 (ADMIN, 본인 PIN 재확인).
+ * 서비스 첫 안내용. 모두 다음 로그인 때 PIN 변경이 강제되고(mustChangePin), 로그인 실패 잠금도 풀린다.
+ */
+teachersRouter.post(
+  '/reset-pin-all',
+  requireAdmin,
+  handle(async (req, res) => {
+    const parsed = resetAllSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? '입력값이 올바르지 않습니다.' });
+    const admin = await prisma.teacher.findUniqueOrThrow({ where: { id: req.user!.id } });
+    if (!(await verifyPin(parsed.data.adminPin, admin.pinHash))) {
+      return res.status(401).json({ error: '관리자 PIN이 올바르지 않습니다.' });
+    }
+    const pinHash = await hashPin(parsed.data.newPin);
+    const { count } = await prisma.teacher.updateMany({
+      where: { isAdmin: false },
+      data: { pinHash, mustChangePin: true, failedLoginCount: 0, lockedUntil: null },
+    });
+    await recordAudit(req.user!.id, 'RESET_PIN', { all: true, count });
+    res.json({ ok: true, count });
+  }),
+);
 
 /** POST /api/teachers/:id/reset-pin — PIN 초기화 (ADMIN). */
 teachersRouter.post('/:id/reset-pin', requireAdmin, async (req, res) => {
