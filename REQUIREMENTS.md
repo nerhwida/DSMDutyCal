@@ -40,7 +40,8 @@
 | 변경 | **로그인은 이름 직접 입력 + PIN** (관리자 포함). 로그인 화면에 교사 목록을 노출하지 않으며 `GET /api/auth/teachers`는 삭제. 동명이인은 PIN으로 구분한다. 기존: 이름 선택. | 가정 9, §7 |
 | 변경 | 교사 관리 목록은 **관리자 먼저, 이후 이름 오름차순**으로 표시. | F2 |
 | 변경 | 일정 관리 화면에서 **방과후 운영일을 특별 일정 등록 위**에 배치. | F3 |
-| 변경 | 감독표 배포 API의 감독 교사에서 `teacherId`를 빼고 `name`만 제공. | F12 |
+| 추가 | **방과후 보강** 탭 (F13): 왼쪽 방과후 휴강·자습 현황(날짜/강좌명/담당 교사명/인원/자습 장소/비고) 누적 입력·수정, 오른쪽 보강 계획 참고 사항(한 줄 글). 누구나 등록, 수정·삭제는 작성자·관리자·학년부장. | F13, §4, §7 |
+| 변경 | 감독표 배포 API의 감독 교사에서 `teacherId`를 빼고 `name`만 제공. 월별 응답에서 `generatedAt`·`grades`, 일별 응답에서 `type`을 뺀다. | F12 |
 | 추가 | 감독표 배포 **일별 API** `GET /api/public/duty/:year/:month/:day` (월별 응답의 하루치와 같은 형식). | F12, §7 |
 | 추가 | 달력 **키보드 입력 모드** (학년부장·ADMIN): 빈 칸(미편성·미배정)을 입력칸으로 바꿔 이름·초성(예: `ㄱㅁ`)으로 교사를 찾고 ↑/↓·Enter로 저장. Tab(Shift+Tab)은 같은 학년의 다음(이전) 날짜, 목록이 없을 때 ↑/↓는 같은 날짜의 위·아래 학년으로 이동하며, 저장 후에는 같은 학년의 다음 날짜로 넘어간다. 규칙은 빈 칸 직접 지정과 같고 경고(⚠) 교사를 고르면 강제 배정. | F5, F6 |
 | 변경 | 달력 옆 현황에서 공정성(누계 편차) 영역과 하단 설명 문구를 뺀다. | F5, F7 |
@@ -477,9 +478,9 @@ SQLite는 Prisma 네이티브 `enum`을 지원하지 않으므로 enum 성격의
 
 ### F12. 감독표 배포 API *(추가)*
 - 외부 시스템(학교 홈페이지, 메신저 봇 등)이 월별·날짜별 1·2·3학년 감독 교사를 JSON으로 받아 가는 API.
-- `GET /api/public/duty/:year/:month`(월별), `GET /api/public/duty/:year/:month/:day`(일별 *(추가)*: 월별 `days[]`의 하루치와 같은 형식, 없는 날짜는 400), 헤더 `X-API-Key: <연동 계정 키>` (로그인 세션으로도 조회 가능).
+- `GET /api/public/duty/:year/:month`(월별), `GET /api/public/duty/:year/:month/:day`(일별 *(추가)*: 월별 `days[]`의 하루치에서 `type`만 뺀 형식, 없는 날짜는 400), 헤더 `X-API-Key: <연동 계정 키>` (로그인 세션으로도 조회 가능).
 - **확정·마감된 학년만 공개**한다. 미리보기(DRAFT) 학년은 누가 호출해도 `null`이다.
-- 해당 월의 모든 날짜를 포함한다.
+- 월별 응답은 `{ year, month, days }`이고 해당 월의 모든 날짜를 포함한다 (생성 시각·학년별 공개 상태는 내보내지 않음 *(개정)*).
   - `type`: `WEEKEND` | `SPECIAL`(전 학년 특별 일정) | `OPERATING`(한 학년 이상 운영)
   - 운영일에는 `duty: { "1": {name} | null, "2": …, "3": … }` (교사 id는 내보내지 않음 *(개정)*)
   - 특별 일정이 있으면 `specialDays: [{grade, type, title}]`. 일부 학년만 제외된 날은 `OPERATING`이고, 제외된 학년의 `duty`는 `null`이다.
@@ -488,6 +489,16 @@ SQLite는 Prisma 네이티브 `enum`을 지원하지 않으므로 enum 성격의
   - 재발급(기존 키 즉시 무효), 비활성화, 삭제를 할 수 있고, 마지막 사용 시각을 표시한다.
   - 연동 계정 키로는 배포 API 외 모든 API가 `403`이고, 앱 로그인도 할 수 없다.
 - CORS는 앱 주소만 허용하므로 **서버 간 호출** 용도다.
+
+
+### F13. 방과후 보강 *(추가)*
+- 모든 교사가 쓰는 '방과후 보강' 탭. 한 화면을 좌우로 나눈다.
+- **왼쪽: 방과후 휴강·자습 현황** (누적 목록, 날짜순)
+  - 항목: 날짜(`09.16.(수)` 형식 표시) / 방과후학교 강좌명 / 강좌 담당 교사명(자유 입력) / 인원 / 자습 장소 / 비고(예: 보강일)
+  - 표 맨 위 줄에서 바로 입력하고 Enter 또는 '추가'로 등록한다. 같은 날 여러 강좌를 넣기 쉽도록 추가 후에도 날짜는 남긴다.
+- **오른쪽: 보강 계획 시 참고 사항** — 한 줄 글 단위로 추가·수정·삭제.
+- 권한: 로그인한 교사는 누구나 등록. 수정·삭제는 **작성자 본인과 관리자·학년부장**.
+- 모델: `AfterSchoolRecord`(date, courseName, instructorName, studentCount, studyRoom, note?, createdById?), `MakeupNote`(content, createdById?). 작성자 교사가 삭제되면 `createdById`는 null.
 
 ---
 
@@ -638,6 +649,10 @@ interface HardRule {       // 후보 제외 규칙
 | GET | /api/stats/range?from=YYYY-MM&to=YYYY-MM | 기간 통계 (최대 24개월) | 로그인 |
 | POST | /api/teachers/:id/stats-exclusions | 통계 제외 월 등록 `{from: 'YYYY-MM', to?}` | ADMIN, 학년부장 |
 | DELETE | /api/teachers/:id/stats-exclusions/:recordId | 통계 제외 월 삭제 | ADMIN, 학년부장 |
+| GET/POST | /api/makeup/records | 방과후 휴강·자습 현황 조회·등록 (F13) | 로그인 |
+| PUT/DELETE | /api/makeup/records/:id | 현황 수정·삭제 | 작성자, ADMIN, 학년부장 |
+| GET/POST | /api/makeup/notes | 보강 계획 참고 사항 조회·등록 (F13) | 로그인 |
+| PUT/DELETE | /api/makeup/notes/:id | 참고 사항 수정·삭제 | 작성자, ADMIN, 학년부장 |
 | GET | /api/public/duty/:year/:month | 감독표 배포 (F12, 월별) | API 연동 계정 키 또는 로그인 |
 | GET | /api/public/duty/:year/:month/:day | 감독표 배포 (F12, 일별) | API 연동 계정 키 또는 로그인 |
 | GET/POST | /api/api-clients | API 연동 계정 목록·생성 (생성 시 키 1회 반환) | ADMIN |

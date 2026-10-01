@@ -363,6 +363,11 @@ REQUIREMENTS.md의 데이터 모델(§4)에는 `Teacher.sortOrder` 하나만 있
   `request.agent()`(쿠키 세션용)로 `createApp()`에 실제 HTTP 요청을 보낸다.
   예외는 `permissions/middleware.test.ts`로, 모킹한 `req`/`res`로 미들웨어 함수를 직접 테스트한다.
 
+### 방과후 보강 (F13)
+- `routes/makeup.routes.ts` (`/api/makeup/records`, `/api/makeup/notes`), 화면 `pages/MakeupPage.tsx` ('방과후 보강' 탭, 모든 교사).
+- 등록은 누구나, 수정·삭제는 작성자 또는 `gradeHeadOf.length > 0`(ADMIN·학년부장). 목록 응답의 `canEdit`으로 화면이 버튼을 보인다.
+- 작성자 FK는 `onDelete: SetNull`이라 교사 삭제를 막지 않는다. 감독 편성과는 연결되지 않는 독립 기록이다.
+
 ### 날짜
 REQUIREMENTS.md §8(Asia/Seoul, 타임존 버그 방지)에 따라 모든 날짜는 처음부터 끝까지 `'YYYY-MM-DD'`
 문자열로 다룬다 (DB 컬럼, API 페이로드, 클라이언트 상태). 네이티브 `Date` 객체는 쓰지 않는다.
