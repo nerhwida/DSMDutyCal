@@ -70,6 +70,29 @@ describe('월별 감독표 배포 API (GET /api/public/duty/:year/:month)', () =
     expect(byDate.get('2032-03-06')).toMatchObject({ weekday: '토', type: 'WEEKEND' });
   });
 
+  it('일별 API는 그날 하루치를 월별과 같은 형식으로 준다', async () => {
+    const { key } = await newClient('일별 연동');
+    const res = await request(app).get('/api/public/duty/2032/3/1').set('X-API-Key', key);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      date: '2032-03-01',
+      weekday: '월',
+      type: 'OPERATING',
+      specialDays: [{ grade: 2, type: 'EVENT', title: '2학년 수학여행' }],
+      duty: { '1': { teacherId: expect.any(Number), name: teacherName }, '2': null, '3': null },
+    });
+    expect((await request(app).get('/api/public/duty/2032/3/6').set('X-API-Key', key)).body).toEqual({
+      date: '2032-03-06',
+      weekday: '토',
+      type: 'WEEKEND',
+    });
+
+    // 없는 날짜·잘못된 형식은 400, 키 없으면 401
+    expect((await request(app).get('/api/public/duty/2032/2/30').set('X-API-Key', key)).status).toBe(400);
+    expect((await request(app).get('/api/public/duty/2032/3/0').set('X-API-Key', key)).status).toBe(400);
+    expect((await request(app).get('/api/public/duty/2032/3/1')).status).toBe(401);
+  });
+
   it('로그인 세션으로도 조회할 수 있다', async () => {
     const agent = request.agent(app);
     await agent.post('/api/auth/login').send(await loginBody(await findTeacherId('평교사'), '4444'));

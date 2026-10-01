@@ -26,3 +26,23 @@ publicRouter.get(
     res.json(await getDutyFeed(parsed.data.year, parsed.data.month));
   }),
 );
+
+/**
+ * GET /api/public/duty/:year/:month/:day — 그날의 1·2·3학년 감독 교사.
+ * 월별 응답의 days[] 하루치와 같은 형식이다 (확정·마감 학년만 공개).
+ */
+publicRouter.get(
+  '/duty/:year/:month/:day',
+  requireApiClientOrSession,
+  handle(async (req, res) => {
+    const parsed = paramsSchema.extend({ day: z.coerce.number().int().min(1).max(31) }).safeParse(req.params);
+    if (!parsed.success) return res.status(400).json({ error: '날짜 정보가 올바르지 않습니다.' });
+    const { year, month, day } = parsed.data;
+    const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const feed = await getDutyFeed(year, month);
+    const found = feed.days.find((d) => d.date === date);
+    if (!found) return res.status(400).json({ error: '날짜 정보가 올바르지 않습니다.' }); // 예: 2월 30일
+    res.set('Cache-Control', 'no-store');
+    res.json(found);
+  }),
+);
