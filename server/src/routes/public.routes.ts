@@ -27,9 +27,12 @@ publicRouter.get(
   }),
 );
 
+/** 학년별 자습 층 (연동처 요청 형식: 3학년 2층, 2학년 3층, 1학년 4층). */
+const FLOOR_BY_GRADE: Record<string, number> = { '1': 4, '2': 3, '3': 2 };
+
 /**
- * GET /api/public/duty/:year/:month/:day — 그날의 1·2·3학년 감독 교사.
- * 월별 응답의 days[] 하루치에서 type만 뺀 형식이다 (확정·마감 학년만 공개).
+ * GET /api/public/duty/:year/:month/:day — 그날의 층별 감독 교사 (확정·마감 학년만 공개).
+ * 응답: { date, teacher: [{ floor, teacher }] } — 감독이 있는 학년만, 층 오름차순. 감독이 없는 날은 빈 배열.
  */
 publicRouter.get(
   '/duty/:year/:month/:day',
@@ -42,8 +45,12 @@ publicRouter.get(
     const feed = await getDutyFeed(year, month);
     const found = feed.days.find((d) => d.date === date);
     if (!found) return res.status(400).json({ error: '날짜 정보가 올바르지 않습니다.' }); // 예: 2월 30일
-    const { type: _type, ...result } = found;
+    const duty = 'duty' in found ? found.duty : undefined;
+    const teacher = Object.entries(duty ?? {})
+      .filter((entry): entry is [string, { name: string }] => entry[1] !== null)
+      .map(([grade, t]) => ({ floor: FLOOR_BY_GRADE[grade], teacher: t.name }))
+      .sort((a, b) => a.floor - b.floor);
     res.set('Cache-Control', 'no-store');
-    res.json(result);
+    res.json({ date, teacher });
   }),
 );

@@ -67,19 +67,37 @@ describe('월별 감독표 배포 API (GET /api/public/duty/:year/:month)', () =
     expect(byDate.get('2032-03-06')).toMatchObject({ weekday: '토', type: 'WEEKEND' });
   });
 
-  it('일별 API는 그날 하루치를 월별 형식에서 type만 빼고 준다', async () => {
+  it('일별 API는 층별 감독 교사를 준다 (3학년 2층, 2학년 3층, 1학년 4층, 층 오름차순)', async () => {
     const { key } = await newClient('일별 연동');
-    const res = await request(app).get('/api/public/duty/2032/3/1').set('X-API-Key', key);
+    const names = ['일학년감독', '이학년감독', '삼학년감독'].map((n) => `${n}_${Date.now()}`);
+    for (const [i, name] of names.entries()) {
+      const grade = i + 1;
+      const t = await prisma.teacher.create({ data: { name, pinHash: 'x' } });
+      await prisma.monthPlan.create({ data: { year: 2032, month: 5, grade, status: 'CONFIRMED' } });
+      await prisma.assignment.create({
+        data: { date: '2032-05-03', grade, teacherId: t.id, originalTeacherId: t.id, rotationGroup: 'WEEKDAY' },
+      });
+    }
+
+    const res = await request(app).get('/api/public/duty/2032/5/3').set('X-API-Key', key);
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
+      date: '2032-05-03',
+      teacher: [
+        { floor: 2, teacher: names[2] },
+        { floor: 3, teacher: names[1] },
+        { floor: 4, teacher: names[0] },
+      ],
+    });
+
+    // 감독이 없는 학년(특별 일정·미확정)은 빠지고, 주말은 빈 배열
+    expect((await request(app).get('/api/public/duty/2032/3/1').set('X-API-Key', key)).body).toEqual({
       date: '2032-03-01',
-      weekday: '월',
-      specialDays: [{ grade: 2, type: 'EVENT', title: '2학년 수학여행' }],
-      duty: { '1': { name: teacherName }, '2': null, '3': null },
+      teacher: [{ floor: 4, teacher: teacherName }],
     });
     expect((await request(app).get('/api/public/duty/2032/3/6').set('X-API-Key', key)).body).toEqual({
       date: '2032-03-06',
-      weekday: '토',
+      teacher: [],
     });
 
     // 없는 날짜·잘못된 형식은 400, 키 없으면 401
