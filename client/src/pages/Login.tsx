@@ -12,11 +12,11 @@ export function LoginPage() {
     e.preventDefault();
     setError(null);
     if (!name.trim()) {
-      setError('이름을 입력해주세요.');
+      setError('ID를 입력해주세요.');
       return;
     }
     if (!/^\d{4,6}$/.test(pin)) {
-      setError('PIN은 숫자 4~6자리로 입력해주세요.');
+      setError('PASSWD는 숫자 4~6자리로 입력해주세요.');
       return;
     }
     setSubmitting(true);
@@ -38,7 +38,7 @@ export function LoginPage() {
         <h1 className="mb-1 text-xl font-bold text-slate-800">DutyCal 로그인</h1>
         <p className="mb-6 text-sm text-slate-500">자율학습 감독 관리 시스템</p>
 
-        <label className="mb-1 block text-sm font-medium text-slate-700">교사 이름</label>
+        <label className="mb-1 block text-sm font-medium text-slate-700">ID</label>
         <input
           type="text"
           autoComplete="username"
@@ -48,7 +48,7 @@ export function LoginPage() {
           className="mb-4 w-full rounded border border-slate-300 px-3 py-2 text-sm"
         />
 
-        <label className="mb-1 block text-sm font-medium text-slate-700">PIN (4~6자리)</label>
+        <label className="mb-1 block text-sm font-medium text-slate-700">PASSWD</label>
         <input
           type="password"
           autoComplete="current-password"
