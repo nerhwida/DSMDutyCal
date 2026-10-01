@@ -112,7 +112,8 @@ $env:NODE_OPTIONS = "--use-system-ca"
 - 모든 권한 검사는 서버에서만 한다. 클라이언트의 어떤 것도 보안 경계로 취급하지 않는다.
 - **가정 8("비로그인 접근 없음")의 의도적 예외 하나**가 있다 (프로젝트 오너 승인).
   - `GET /api/public/duty/:year/:month`(`routes/public.routes.ts`)는 외부 시스템용 월별·날짜별 감독표
-    피드다. 일별 `…/:year/:month/:day`는 같은 `getDutyFeed()` 결과에서 그날 하나를 꺼내 준다.
+    피드다. 일별 `…/:year/:month/:day`는 같은 `getDutyFeed()` 결과에서 그날 하나를 꺼내
+    연동처 형식 `{ date, teacher: [{ floor, teacher }] }`로 바꿔 준다 (층 매핑 `FLOOR_BY_GRADE`: 3학년 2층·2학년 3층·1학년 4층).
   - 일반 로그인 세션, 또는 **API 연동 계정**(`ApiClient` 모델, `requireApiClientOrSession`)의 헤더
     `X-API-Key`로 호출할 수 있다.
   - CONFIRMED/CLOSED 학년만 공개하고 DRAFT는 절대 내보내지 않는다.

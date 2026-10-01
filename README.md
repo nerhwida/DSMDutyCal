@@ -214,17 +214,23 @@ X-API-Key: dcf_xxxxxxxxxxxxxxxx
 }
 ```
 
-날짜 하나만 받으려면 일별 API를 씁니다. 응답은 월별 `days[]`의 하루치에서 `type`만 뺀 형식이고, 없는 날짜(예: 2월 30일)는 `400`입니다.
+날짜 하나만 받으려면 일별 API를 씁니다. 그날 감독이 있는 층과 교사만 층 순서로 줍니다(3학년 2층, 2학년 3층, 1학년 4층).
+감독이 없는 학년(특별 일정·방과후로 자습 없음·미확정)은 빠지고, 주말처럼 감독이 없는 날은 빈 배열입니다. 없는 날짜(예: 2월 30일)는 `400`입니다.
 
 ```http
-GET /api/public/duty/2026/10/14
+GET /api/public/duty/2026/10/1
 X-API-Key: dcf_xxxxxxxxxxxxxxxx
 ```
 
 ```json
-{ "date": "2026-10-14", "weekday": "수",
-  "specialDays": [{ "grade": 2, "type": "EVENT", "title": "2학년 수학여행" }],
-  "duty": { "1": { "name": "이○○" }, "2": null, "3": { "name": "박○○" } } }
+{
+  "date": "2026-10-01",
+  "teacher": [
+    { "floor": 2, "teacher": "이○○" },
+    { "floor": 3, "teacher": "박○○" },
+    { "floor": 4, "teacher": "김○○" }
+  ]
+}
 ```
 
 - **확정·마감된 학년만 공개**하고, 미리보기(편성 중) 학년은 `null`입니다.
