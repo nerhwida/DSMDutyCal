@@ -242,6 +242,9 @@ REQUIREMENTS.md의 데이터 모델(§4)에는 `Teacher.sortOrder` 하나만 있
   - **고정(🔒) 기능은 없다** (오너 결정으로 제거, 마이그레이션 `remove_assignment_lock`). 대신 `loadSchedulerInput`이
     **변경 이력(AssignmentHistory)이 있는 셀을 `isModified: true`로 엔진에 넘겨** 자동 편성·부분 재편성에서 유지한다
     (직접 지정·ADMIN 변경 셀은 ↻ 표시가 없어도 보호). 부분 재편성의 `includeModified`는 이 셀들도 다시 편성한다.
+  - **키보드 입력 모드**(달력 툴바 `⌨ 키보드 입력`): 담당 학년의 빈 칸이 `QuickFillInput`이 되어 같은 API(`GET …/candidates`,
+    `POST /api/assignments`)를 쓴다. 이름·초성 검색은 `client/src/lib/hangul.ts`. 차단 교사는 목록에서 빼고, 경고 교사를
+    고르면 `force: true`. 저장 후 문서 순서상 다음 `input[data-quickfill]`로 포커스를 옮긴다(달력을 다시 불러온 뒤).
   - 후보 목록 응답의 각 교사에는 담당 학년 `grades`가 있다. 클라이언트 `CandidateList`가 감독 칸의 학년 → 다른 학년 →
     미지정 순으로 묶고 이름(ko) 순으로 정렬한다 (관리 변경·빈 칸 지정 팝오버 공통).
   - 이력은 `fromTeacherId = null`로 남긴다.
