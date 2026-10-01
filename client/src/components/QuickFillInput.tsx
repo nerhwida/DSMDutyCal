@@ -19,7 +19,8 @@ const MAX_ITEMS = 8;
 /**
  * 키보드로 빈 칸에 감독 교사 지정 (달력 '키보드 입력' 모드).
  * 이름 일부나 초성(예: 'ㄱㅁ')을 치면 그 칸에 배정 가능한 교사가 뜨고, ↑/↓로 고른 뒤 Enter로 저장한다.
- * Tab·Shift+Tab은 브라우저 기본 동작대로 다음·이전 칸으로 이동한다.
+ * Tab·Shift+Tab은 같은 학년의 다음·이전 날짜 칸으로, (목록이 없을 때) ↑/↓는 같은 날짜의 위·아래 학년 칸으로 이동한다.
+ * Enter로 저장하면 같은 학년의 다음 날짜 칸으로 넘어간다.
  * 그날 감독할 수 없는 교사(같은 날 다른 학년 감독 중 등)는 목록에서 빼고, 경고가 있는 교사는 ⚠와 사유를 붙여 보여 준다.
  */
 export function QuickFillInput({ date, grade, cellKey, placeholder, className, onSaved }: QuickFillInputProps) {
@@ -56,10 +57,31 @@ export function QuickFillInput({ date, grade, cellKey, placeholder, className, o
     [candidates, query],
   );
 
+  /** 달력의 다른 입력칸 찾기: 같은 학년의 다음/이전 날짜, 또는 같은 날짜의 아래/위 학년. */
+  function findInput(kind: 'date' | 'grade', dir: 1 | -1): HTMLInputElement | null {
+    const cells = [...document.querySelectorAll<HTMLInputElement>('input[data-quickfill]')].map((el) => {
+      const [d, g] = el.dataset.quickfill!.split(':');
+      return { el, date: d, grade: Number(g) };
+    });
+    const candidatesOf =
+      kind === 'date'
+        ? cells.filter((c) => c.grade === grade && (dir > 0 ? c.date > date : c.date < date))
+        : cells.filter((c) => c.date === date && (dir > 0 ? c.grade > grade : c.grade < grade));
+    const value = (c: (typeof cells)[number]) => (kind === 'date' ? c.date : String(c.grade));
+    candidatesOf.sort((a, b) => (value(a) < value(b) ? -dir : value(a) > value(b) ? dir : 0));
+    return candidatesOf[0]?.el ?? null;
+  }
+
+  /** 저장 후 이동할 칸: 같은 학년의 다음 날짜 */
   function nextInputKey(): string | null {
-    const all = [...document.querySelectorAll<HTMLInputElement>('input[data-quickfill]')];
-    const i = all.indexOf(inputRef.current!);
-    return all[i + 1]?.dataset.quickfill ?? null;
+    return findInput('date', 1)?.dataset.quickfill ?? null;
+  }
+
+  function moveTo(target: HTMLInputElement | null, e: React.KeyboardEvent) {
+    if (!target) return;
+    e.preventDefault();
+    setOpen(false);
+    target.focus();
   }
 
   async function choose(c: Candidate) {
@@ -86,13 +108,21 @@ export function QuickFillInput({ date, grade, cellKey, placeholder, className, o
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'ArrowDown' && matches.length > 0) {
-      e.preventDefault();
-      setOpen(true);
-      setHighlight((h) => (h + 1) % matches.length);
-    } else if (e.key === 'ArrowUp' && matches.length > 0) {
-      e.preventDefault();
-      setHighlight((h) => (h - 1 + matches.length) % matches.length);
+    const listShown = open && matches.length > 0;
+    if (e.key === 'Tab') {
+      // Tab: 같은 학년의 다음 날짜, Shift+Tab: 이전 날짜 (없으면 브라우저 기본 이동)
+      moveTo(findInput('date', e.shiftKey ? -1 : 1), e);
+    } else if (e.key === 'ArrowDown') {
+      // 목록이 떠 있으면 목록 선택, 아니면 같은 날짜의 아래 학년
+      if (listShown) {
+        e.preventDefault();
+        setHighlight((h) => (h + 1) % matches.length);
+      } else moveTo(findInput('grade', 1), e);
+    } else if (e.key === 'ArrowUp') {
+      if (listShown) {
+        e.preventDefault();
+        setHighlight((h) => (h - 1 + matches.length) % matches.length);
+      } else moveTo(findInput('grade', -1), e);
     } else if (e.key === 'Enter') {
       e.preventDefault();
       const c = matches[highlight] ?? matches[0];
@@ -112,7 +142,7 @@ export function QuickFillInput({ date, grade, cellKey, placeholder, className, o
         value={query}
         disabled={busy}
         placeholder={placeholder}
-        title={error ?? '이름 또는 초성 입력 → ↑/↓ 선택 → Enter 저장 · Tab 다음 칸'}
+        title={error ?? '이름 또는 초성 입력 → ↑/↓ 선택 → Enter 저장 · Tab 다음 날짜 · ↑/↓ 학년 이동'}
         onFocus={() => {
           loadCandidates();
           setOpen(true);

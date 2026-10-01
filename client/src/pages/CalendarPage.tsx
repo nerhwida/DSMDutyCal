@@ -365,7 +365,7 @@ export function CalendarPage() {
         {managedGrades.length > 0 && (
           <button
             onClick={() => setKeyboardMode((on) => !on)}
-            title="빈 칸에 이름이나 초성(예: ㄱㅁ)을 입력해 감독을 지정합니다. ↑/↓ 선택, Enter 저장, Tab 다음 칸. 학년을 하나 고르면 날짜 순서로 이동합니다."
+            title="빈 칸에 이름이나 초성(예: ㄱㅁ)을 입력해 감독을 지정합니다. ↑/↓ 선택, Enter 저장. Tab은 같은 학년의 다음 날짜, (목록이 없을 때) ↑/↓는 위·아래 학년으로 이동합니다."
             className={`rounded border px-2 py-1 text-xs ${
               keyboardMode ? 'border-sky-600 bg-sky-600 text-white' : 'border-slate-300 text-slate-600 hover:bg-slate-100'
             }`}
