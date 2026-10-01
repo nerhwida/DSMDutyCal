@@ -3,6 +3,7 @@ import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { Popover } from '../components/Popover';
 import { SwapPopover } from '../components/SwapPopover';
+import { QuickFillInput } from '../components/QuickFillInput';
 import { ManagePopover } from '../components/ManagePopover';
 import { StatusPanel } from '../components/StatusPanel';
 import { RegeneratePopover } from '../components/RegeneratePopover';
@@ -99,6 +100,9 @@ export function CalendarPage() {
   const [fillPopover, setFillPopover] = useState<{ date: string; grade: Grade; reasons: string[]; anchor: DOMRect } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // 키보드 입력 모드: 빈 칸을 입력칸으로 바꿔 이름·초성으로 바로 지정한다
+  const [keyboardMode, setKeyboardMode] = useState(false);
+  const [nextFocus, setNextFocus] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -118,6 +122,18 @@ export function CalendarPage() {
     setRegenResult(null);
     load();
   }, [load]);
+
+  // 키보드 입력으로 저장한 뒤 다시 불러오면 다음 빈 칸으로 커서를 옮긴다
+  useEffect(() => {
+    if (!nextFocus) return;
+    document.querySelector<HTMLInputElement>(`input[data-quickfill="${nextFocus}"]`)?.focus();
+    setNextFocus(null);
+  }, [view, nextFocus]);
+
+  async function afterQuickFill(nextKey: string | null) {
+    await load();
+    setNextFocus(nextKey);
+  }
 
   const index = useMemo(() => {
     const assignments = new Map<string, AssignmentView>();
@@ -346,6 +362,18 @@ export function CalendarPage() {
           <input type="checkbox" checked={highlightMine} onChange={(e) => setHighlightMine(e.target.checked)} />내 감독만 강조
         </label>
 
+        {managedGrades.length > 0 && (
+          <button
+            onClick={() => setKeyboardMode((on) => !on)}
+            title="빈 칸에 이름이나 초성(예: ㄱㅁ)을 입력해 감독을 지정합니다. ↑/↓ 선택, Enter 저장, Tab 다음 칸. 학년을 하나 고르면 날짜 순서로 이동합니다."
+            className={`rounded border px-2 py-1 text-xs ${
+              keyboardMode ? 'border-sky-600 bg-sky-600 text-white' : 'border-slate-300 text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            ⌨ 키보드 입력{keyboardMode ? ' 켜짐' : ''}
+          </button>
+        )}
+
         <button
           onClick={() => window.print()}
           className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100"
@@ -464,6 +492,28 @@ export function CalendarPage() {
                               >
                                 <span className="w-3 opacity-70">{g}</span>
                                 <span className="truncate">방과후 · 자습 없음</span>
+                              </div>
+                            );
+                          }
+                          // 키보드 입력 모드: 담당 학년의 빈 칸(미편성·미배정)은 입력칸
+                          if (
+                            keyboardMode &&
+                            !a &&
+                            user!.gradeHeadOf.includes(g) &&
+                            status !== 'CLOSED' &&
+                            (status === 'EMPTY' || info?.assignmentsVisible)
+                          ) {
+                            return (
+                              <div key={g} className={`${base} print:hidden`}>
+                                <span className={`w-3 ${status === 'EMPTY' ? 'text-slate-400' : 'text-red-600'}`}>{g}</span>
+                                <QuickFillInput
+                                  date={date}
+                                  grade={g}
+                                  cellKey={`${date}:${g}`}
+                                  placeholder={status === 'EMPTY' ? '—' : '미배정'}
+                                  className={status === 'EMPTY' ? '' : 'placeholder:text-red-400'}
+                                  onSaved={afterQuickFill}
+                                />
                               </div>
                             );
                           }
