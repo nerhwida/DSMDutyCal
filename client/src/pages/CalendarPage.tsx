@@ -34,7 +34,7 @@ const SPECIAL_STYLE: Record<SpecialDayType, string> = {
   SCHOOL_CLOSURE: 'bg-slate-100 text-slate-700',
   EXAM: 'bg-orange-50 text-orange-700',
   EVENT: 'bg-emerald-50 text-emerald-700',
-  OTHER: 'bg-slate-50 text-slate-600',
+  OTHER: 'bg-rose-50 text-rose-700',
 };
 
 const gradesLabel = (grades: Grade[]) => (grades.length === 3 ? '전 학년' : `${grades.join('·')}학년`);
@@ -446,12 +446,15 @@ export function CalendarPage() {
 
                     {fullDay &&
                       groupSpecials(specials).map((s) => (
-                        <div key={`${s.type}-${s.title}`} className={`rounded px-1 py-0.5 text-sm print:text-[11px] ${SPECIAL_STYLE[s.type]}`}>
+                        <div
+                          key={`${s.type}-${s.title}`}
+                          title={`${SPECIAL_DAY_TYPE_LABEL[s.type]} · 감독 미편성`}
+                          className={`rounded px-1 py-0.5 text-sm print:text-[11px] ${SPECIAL_STYLE[s.type]}`}
+                        >
                           <p className="font-medium">
                             {s.grades.length < 3 && <span className="mr-1 opacity-70">{s.grades.join('·')}학년</span>}
                             {s.title}
                           </p>
-                          {!weekend && <p className="opacity-70">{SPECIAL_DAY_TYPE_LABEL[s.type]} · 감독 미편성</p>}
                         </div>
                       ))}
 
