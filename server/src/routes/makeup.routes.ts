@@ -24,7 +24,7 @@ const text = (label: string, max: number) =>
 const recordSchema = z.object({
   date: dateStringSchema,
   courseName: text('강좌명', 100),
-  instructorName: text('강좌 담당 교사명', 50),
+  instructorName: text('담당교사', 50),
   studentCount: z
     .number({ required_error: '인원을 입력해주세요.', invalid_type_error: '인원을 숫자로 입력해주세요.' })
     .int('인원을 올바르게 입력해주세요.')

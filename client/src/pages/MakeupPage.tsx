@@ -24,7 +24,7 @@ const emptyForm = (): RecordForm => ({
   courseName: '',
   instructorName: '',
   studentCount: '',
-  studyRoom: '',
+  studyRoom: '창조실', // 기본 자습 장소 (필요하면 바꿔 입력)
   note: '',
 });
 
@@ -130,7 +130,7 @@ function RecordsSection() {
       <>
         {input('date', { type: 'date' })}
         {input('courseName', { placeholder: '강좌명' })}
-        {input('instructorName', { placeholder: '담당 교사' })}
+        {input('instructorName', { placeholder: '담당교사' })}
         {input('studentCount', { type: 'number', min: 0, className: `${inputClass} w-16` })}
         {input('studyRoom', { placeholder: '자습 장소' })}
         {input('note', { placeholder: '예: 10.01.(목) 보강' })}
@@ -152,7 +152,7 @@ function RecordsSection() {
             <tr>
               <th className="w-36 px-2 py-1.5 text-left">날짜</th>
               <th className="px-2 py-1.5 text-left">방과후학교 강좌명</th>
-              <th className="w-24 px-2 py-1.5 text-left">강좌담당교사명</th>
+              <th className="w-24 px-2 py-1.5 text-left">담당교사</th>
               <th className="w-16 px-2 py-1.5 text-left">인원</th>
               <th className="w-24 px-2 py-1.5 text-left">자습 장소</th>
               <th className="px-2 py-1.5 text-left">비고</th>
