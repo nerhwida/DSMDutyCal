@@ -40,6 +40,7 @@
 | 변경 | **로그인은 이름 직접 입력 + PIN** (관리자 포함). 로그인 화면에 교사 목록을 노출하지 않으며 `GET /api/auth/teachers`는 삭제. 동명이인은 PIN으로 구분한다. 기존: 이름 선택. | 가정 9, §7 |
 | 변경 | 교사 관리 목록은 **관리자 먼저, 이후 이름 오름차순**으로 표시. | F2 |
 | 변경 | 일정 관리 화면에서 **방과후 운영일을 특별 일정 등록 위**에 배치. | F3 |
+| 추가 | 감독표 배포 **일별 API** `GET /api/public/duty/:year/:month/:day` (월별 응답의 하루치와 같은 형식). | F12, §7 |
 | 추가 | 달력 **키보드 입력 모드** (학년부장·ADMIN): 빈 칸(미편성·미배정)을 입력칸으로 바꿔 이름·초성(예: `ㄱㅁ`)으로 교사를 찾고 ↑/↓·Enter로 저장. Tab(Shift+Tab)은 같은 학년의 다음(이전) 날짜, 목록이 없을 때 ↑/↓는 같은 날짜의 위·아래 학년으로 이동하며, 저장 후에는 같은 학년의 다음 날짜로 넘어간다. 규칙은 빈 칸 직접 지정과 같고 경고(⚠) 교사를 고르면 강제 배정. | F5, F6 |
 | 변경 | 달력 옆 현황에서 공정성(누계 편차) 영역과 하단 설명 문구를 뺀다. | F5, F7 |
 | 변경 | **자동 편성 선택 기준을 순번 우선으로** 변경 (기존: 누계 우선). 교사 관리에서 드래그로 정한 순환 순서대로 돌아가며 배정하고 불가 교사는 건너뛴다. 순환 순서 목록에는 참고용 누계를 표시. | F2, 6.3 |
@@ -475,7 +476,7 @@ SQLite는 Prisma 네이티브 `enum`을 지원하지 않으므로 enum 성격의
 
 ### F12. 감독표 배포 API *(추가)*
 - 외부 시스템(학교 홈페이지, 메신저 봇 등)이 월별·날짜별 1·2·3학년 감독 교사를 JSON으로 받아 가는 API.
-- `GET /api/public/duty/:year/:month`, 헤더 `X-API-Key: <연동 계정 키>` (로그인 세션으로도 조회 가능).
+- `GET /api/public/duty/:year/:month`(월별), `GET /api/public/duty/:year/:month/:day`(일별 *(추가)*: 월별 `days[]`의 하루치와 같은 형식, 없는 날짜는 400), 헤더 `X-API-Key: <연동 계정 키>` (로그인 세션으로도 조회 가능).
 - **확정·마감된 학년만 공개**한다. 미리보기(DRAFT) 학년은 누가 호출해도 `null`이다.
 - 해당 월의 모든 날짜를 포함한다.
   - `type`: `WEEKEND` | `SPECIAL`(전 학년 특별 일정) | `OPERATING`(한 학년 이상 운영)
@@ -636,7 +637,8 @@ interface HardRule {       // 후보 제외 규칙
 | GET | /api/stats/range?from=YYYY-MM&to=YYYY-MM | 기간 통계 (최대 24개월) | 로그인 |
 | POST | /api/teachers/:id/stats-exclusions | 통계 제외 월 등록 `{from: 'YYYY-MM', to?}` | ADMIN, 학년부장 |
 | DELETE | /api/teachers/:id/stats-exclusions/:recordId | 통계 제외 월 삭제 | ADMIN, 학년부장 |
-| GET | /api/public/duty/:year/:month | 감독표 배포 (F12) | API 연동 계정 키 또는 로그인 |
+| GET | /api/public/duty/:year/:month | 감독표 배포 (F12, 월별) | API 연동 계정 키 또는 로그인 |
+| GET | /api/public/duty/:year/:month/:day | 감독표 배포 (F12, 일별) | API 연동 계정 키 또는 로그인 |
 | GET/POST | /api/api-clients | API 연동 계정 목록·생성 (생성 시 키 1회 반환) | ADMIN |
 | POST | /api/api-clients/:id/regenerate | 키 재발급 | ADMIN |
 | PUT/DELETE | /api/api-clients/:id | 연동 계정 수정(이름·활성)·삭제 | ADMIN |

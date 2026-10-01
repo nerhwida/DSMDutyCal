@@ -211,8 +211,22 @@ X-API-Key: dcf_xxxxxxxxxxxxxxxx
 }
 ```
 
+날짜 하나만 받으려면 일별 API를 씁니다. 응답은 월별 `days[]`의 하루치와 같고, 없는 날짜(예: 2월 30일)는 `400`입니다.
+
+```http
+GET /api/public/duty/2026/10/14
+X-API-Key: dcf_xxxxxxxxxxxxxxxx
+```
+
+```json
+{ "date": "2026-10-14", "weekday": "수", "type": "OPERATING",
+  "specialDays": [{ "grade": 2, "type": "EVENT", "title": "2학년 수학여행" }],
+  "duty": { "1": { "teacherId": 5, "name": "이○○" }, "2": null, "3": { "teacherId": 9, "name": "박○○" } } }
+```
+
 - **확정·마감된 학년만 공개**하고, 미리보기(편성 중) 학년은 `null`입니다.
 - `type`: `WEEKEND`(주말) · `SPECIAL`(전 학년 특별 일정) · `OPERATING`(한 학년 이상 운영)
+- 방과후 운영일이면 `afterSchoolGrades`(그날 자습 감독이 있는 학년)가 붙고, 나머지 학년의 `duty`는 `null`입니다.
 - 연동 계정 키로는 이 API만 호출할 수 있습니다. 다른 API는 `403`이고, 앱 로그인도 할 수 없습니다.
 - CORS가 앱 주소만 허용하므로 **서버 간 호출** 용도입니다.
 
