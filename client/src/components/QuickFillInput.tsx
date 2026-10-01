@@ -21,7 +21,7 @@ const MAX_ITEMS = 8;
  * 이름 일부나 초성(예: 'ㄱㅁ')을 치면 그 칸에 배정 가능한 교사가 뜨고, ↑/↓로 고른 뒤 Enter로 저장한다.
  * Tab·Shift+Tab은 같은 학년의 다음·이전 날짜 칸으로, (목록이 없을 때) ↑/↓는 같은 날짜의 위·아래 학년 칸으로 이동한다.
  * Enter로 저장하면 같은 학년의 다음 날짜 칸으로 넘어간다.
- * 그날 감독할 수 없는 교사(같은 날 다른 학년 감독 중 등)는 목록에서 빼고, 경고가 있는 교사는 ⚠와 사유를 붙여 보여 준다.
+ * 그날 감독할 수 없는 교사(같은 날 다른 학년 감독 중 등)와 관리자 계정은 목록에서 빼고, 경고가 있는 교사는 ⚠와 사유를 붙여 보여 준다.
  */
 export function QuickFillInput({ date, grade, cellKey, placeholder, className, onSaved }: QuickFillInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -39,7 +39,8 @@ export function QuickFillInput({ date, grade, cellKey, placeholder, className, o
       // 이 칸의 학년 교사 먼저, 경고 없는 교사 먼저, 그다음 이름순
       setCandidates(
         res.candidates
-          .filter((c) => !c.blocking)
+          // 감독할 수 없는 교사와 관리자 계정은 목록에서 뺀다
+          .filter((c) => !c.blocking && !c.isAdmin)
           .sort(
             (a, b) =>
               Number(!a.grades.includes(grade)) - Number(!b.grades.includes(grade)) ||
