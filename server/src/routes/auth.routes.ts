@@ -16,7 +16,7 @@ const loginSchema = z.object({
 authRouter.post('/login', async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: '이름과 PIN을 올바르게 입력해주세요.' });
+    return res.status(400).json({ error: 'ID 또는 PASSWD가 올바르지 않습니다.' });
   }
 
   const result = await login(parsed.data.name, parsed.data.pin);
@@ -30,7 +30,7 @@ authRouter.post('/login', async (req, res) => {
     if (result.reason === 'INACTIVE') {
       return res.status(403).json({ error: '비활성화된 계정입니다. 관리자에게 문의하세요.' });
     }
-    return res.status(401).json({ error: '이름 또는 PIN이 올바르지 않습니다.' });
+    return res.status(401).json({ error: 'ID 또는 PASSWD가 올바르지 않습니다.' });
   }
 
   req.session.regenerate((err) => {

@@ -15,8 +15,9 @@ export function LoginPage() {
       setError('ID를 입력해주세요.');
       return;
     }
-    if (!/^\d{4,6}$/.test(pin)) {
-      setError('PASSWD는 숫자 4~6자리로 입력해주세요.');
+    // 형식(숫자 4~6자리)이 맞지 않으면 서버가 'ID 또는 PASSWD가 올바르지 않습니다.'로 답한다
+    if (!pin) {
+      setError('PASSWD를 입력해주세요.');
       return;
     }
     setSubmitting(true);
