@@ -30,6 +30,8 @@ model Teacher {
   weekdayExclusions   TeacherWeekdayExclusion[]
   unavailableDates    TeacherUnavailableDate[]
   statsExclusions     TeacherStatsExclusion[]
+  afterSchoolRecords  AfterSchoolRecord[]
+  makeupNotes         MakeupNote[]
   initialCounts       InitialCount[]
   notifications       Notification[]
   auditLogs           AuditLog[]
@@ -257,4 +259,32 @@ model Session {
 model Setting {
   key   String @id
   value String
+}
+
+/// 방과후 휴강·자습 현황 (방과후 보강 화면 왼쪽). 교사들이 입력해 누적으로 본다.
+/// 작성자 본인과 ADMIN·학년부장이 수정·삭제할 수 있다.
+model AfterSchoolRecord {
+  id             Int      @id @default(autoincrement())
+  date           String // 'YYYY-MM-DD'
+  courseName     String // 방과후학교 강좌명
+  instructorName String // 강좌 담당 교사명 (외부 강사일 수 있어 자유 입력)
+  studentCount   Int // 인원
+  studyRoom      String // 자습 장소
+  note           String? // 비고 (예: 10.01.목 보강)
+  createdById    Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  createdBy Teacher? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+}
+
+/// 보강 계획 시 참고 사항 (방과후 보강 화면 오른쪽). 한 줄 글 단위로 추가·수정·삭제.
+model MakeupNote {
+  id          Int      @id @default(autoincrement())
+  content     String
+  createdById Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy Teacher? @relation(fields: [createdById], references: [id], onDelete: SetNull)
 }

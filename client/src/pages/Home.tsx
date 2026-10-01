@@ -10,10 +10,12 @@ import { SpecialDaysPage } from './SpecialDaysPage';
 import { InitialCountsPage } from './InitialCountsPage';
 import { ApiClientsPage } from './ApiClientsPage';
 import { SettingsPage } from './SettingsPage';
+import { MakeupPage } from './MakeupPage';
 
 type Tab =
   | 'calendar'
   | 'my-duty'
+  | 'makeup'
   | 'stats'
   | 'history'
   | 'teachers'
@@ -32,6 +34,7 @@ export function HomePage() {
   const tabs: { key: Tab; label: string; visible: boolean }[] = [
     { key: 'calendar', label: '월간 달력', visible: true },
     { key: 'my-duty', label: '내 감독', visible: true },
+    { key: 'makeup', label: '방과후 보강', visible: true },
     // 일반 교사에게는 통계·일정 관리 탭을 보여 주지 않는다
     { key: 'stats', label: '통계', visible: canManageTeachers },
     { key: 'history', label: '변경 이력', visible: true },
@@ -80,6 +83,7 @@ export function HomePage() {
       <main className="p-6 print:p-0">
         {tab === 'calendar' && <CalendarPage />}
         {tab === 'my-duty' && <MyDutyPage />}
+        {tab === 'makeup' && <MakeupPage />}
         {tab === 'stats' && canManageTeachers && <StatsPage />}
         {tab === 'history' && <HistoryPage />}
         {tab === 'teachers' && canManageTeachers && <TeacherManagementPage />}

@@ -17,6 +17,7 @@ import { publicRouter } from './routes/public.routes.js';
 import { apiClientsRouter } from './routes/apiClients.routes.js';
 import { historyRouter } from './routes/history.routes.js';
 import { backupRouter } from './routes/backup.routes.js';
+import { makeupRouter } from './routes/makeup.routes.js';
 import { restrictApiKeyToPublic } from './permissions/middleware.js';
 
 export function createApp() {
@@ -55,6 +56,7 @@ export function createApp() {
   app.use('/api/public', publicRouter);
   app.use('/api/api-clients', apiClientsRouter);
   app.use('/api/backup', backupRouter);
+  app.use('/api/makeup', makeupRouter);
 
   // 알 수 없는 /api/* 경로
   app.use('/api', (_req, res) => {

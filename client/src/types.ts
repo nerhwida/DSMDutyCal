@@ -289,3 +289,24 @@ export interface InitialCount {
   count: number;
   teacher?: { id: number; name: string };
 }
+
+/** 방과후 휴강·자습 현황 (방과후 보강 화면) */
+export interface AfterSchoolRecord {
+  id: number;
+  date: string;
+  courseName: string;
+  instructorName: string;
+  studentCount: number;
+  studyRoom: string;
+  note: string | null;
+  createdByName: string | null;
+  canEdit: boolean;
+}
+
+/** 보강 계획 시 참고 사항 */
+export interface MakeupNote {
+  id: number;
+  content: string;
+  createdByName: string | null;
+  canEdit: boolean;
+}
