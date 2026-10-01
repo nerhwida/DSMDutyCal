@@ -29,7 +29,7 @@ publicRouter.get(
 
 /**
  * GET /api/public/duty/:year/:month/:day — 그날의 1·2·3학년 감독 교사.
- * 월별 응답의 days[] 하루치와 같은 형식이다 (확정·마감 학년만 공개).
+ * 월별 응답의 days[] 하루치에서 type만 뺀 형식이다 (확정·마감 학년만 공개).
  */
 publicRouter.get(
   '/duty/:year/:month/:day',
@@ -42,7 +42,8 @@ publicRouter.get(
     const feed = await getDutyFeed(year, month);
     const found = feed.days.find((d) => d.date === date);
     if (!found) return res.status(400).json({ error: '날짜 정보가 올바르지 않습니다.' }); // 예: 2월 30일
+    const { type: _type, ...result } = found;
     res.set('Cache-Control', 'no-store');
-    res.json(found);
+    res.json(result);
   }),
 );

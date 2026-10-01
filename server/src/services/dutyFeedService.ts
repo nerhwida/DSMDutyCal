@@ -71,5 +71,6 @@ export async function getDutyFeed(year: number, month: number) {
     return { ...base, type: 'OPERATING' as const, duty };
   });
 
-  return { year, month, generatedAt: new Date().toISOString(), grades, days };
+  // 학년별 공개 상태·생성 시각은 내보내지 않는다 (미공개 학년은 duty가 null인 것으로 충분)
+  return { year, month, days };
 }
