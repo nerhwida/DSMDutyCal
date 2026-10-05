@@ -328,6 +328,26 @@ describe('기간 통계 (F7)', () => {
     expect(has((await head1.get('/api/stats?year=2038&month=3')).body.rows)).toBe(true);
   });
 
+  it('월 현황은 이번 달·초기 누계·월별 확정 횟수를 학년·그룹별로 준다 (현황 패널 표시용)', async () => {
+    const x = await newTeacher('월별현황', [1]);
+    await prisma.initialCount.create({ data: { teacherId: x.id, grade: 1, rotationGroup: 'FRIDAY', count: 2 } });
+    await setPlan(2038, 9, 1, 'CONFIRMED');
+    await setPlan(2038, 10, 1, 'CONFIRMED');
+    await cell('2038-09-01', 1, x.id); // 수
+    await cell('2038-09-03', 1, x.id); // 금
+    await cell('2038-10-01', 1, x.id); // 금
+
+    const res = await x.agent.get('/api/stats?year=2038&month=10');
+    const row = res.body.rows.find((r: { teacherId: number }) => r.teacherId === x.id);
+    expect(row.monthByGradeGroup).toMatchObject({ '1:WEEKDAY': 0, '1:FRIDAY': 1 });
+    expect(row.initialByGradeGroup).toMatchObject({ '1:FRIDAY': 2 });
+    expect(row.total).toBe(5); // 초기 2 + 확정 3
+    expect(row.monthly).toEqual([
+      { month: '2038-09', byGradeGroup: expect.objectContaining({ '1:WEEKDAY': 1, '1:FRIDAY': 1 }) },
+      { month: '2038-10', byGradeGroup: expect.objectContaining({ '1:WEEKDAY': 0, '1:FRIDAY': 1 }) },
+    ]);
+  });
+
   it('기간이 잘못되면 400', async () => {
     const admin = await adminAgent();
     expect((await admin.get('/api/stats/range?from=2033-08&to=2033-06')).status).toBe(400);

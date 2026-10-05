@@ -50,11 +50,22 @@ async function aggregate(start: string, end: string, user: AuthenticatedUser, in
 
   const period: Counter = new Map();
   const totals: Counter = new Map();
-  for (const c of initialCounts) add(totals, c.teacherId, c.grade, c.rotationGroup, c.count);
+  const initial: Counter = new Map();
+  // 월별 확정·마감 배정 수 ('YYYY-MM' → Counter). 현황 패널의 총횟수 마우스 오버용.
+  const monthly = new Map<string, Counter>();
+  for (const c of initialCounts) {
+    add(totals, c.teacherId, c.grade, c.rotationGroup, c.count);
+    add(initial, c.teacherId, c.grade, c.rotationGroup, c.count);
+  }
   for (const a of upToEnd) {
     const status = planStatus(a.date, a.grade);
     const confirmed = status === 'CONFIRMED' || status === 'CLOSED';
-    if (confirmed) add(totals, a.teacherId, a.grade, a.rotationGroup);
+    if (confirmed) {
+      add(totals, a.teacherId, a.grade, a.rotationGroup);
+      const ym = a.date.slice(0, 7);
+      if (!monthly.has(ym)) monthly.set(ym, new Map());
+      add(monthly.get(ym)!, a.teacherId, a.grade, a.rotationGroup);
+    }
     const countable = confirmed || (includeVisibleDraft && status === 'DRAFT' && user.gradeHeadOf.includes(a.grade));
     if (a.date >= start && countable) add(period, a.teacherId, a.grade, a.rotationGroup);
   }
@@ -65,7 +76,7 @@ async function aggregate(start: string, end: string, user: AuthenticatedUser, in
         t.active && t.teacherGrades.some((g) => g.grade === grade && (group === 'FRIDAY' ? g.canFriday : g.canWeekday)),
     );
 
-  return { teachers, period, totals, eligible, excludedMonths };
+  return { teachers, period, totals, initial, monthly, eligible, excludedMonths };
 }
 
 const monthKey = (year: number, month: number) => `${year}-${String(month).padStart(2, '0')}`;
@@ -105,7 +116,8 @@ function deviation(counts: number[]) {
  */
 export async function getMonthStats(year: number, month: number, user: AuthenticatedUser) {
   const { start, end } = monthBounds(year, month);
-  const { teachers, period, totals, eligible, excludedMonths } = await aggregate(start, end, user, true);
+  const { teachers, period, totals, initial, monthly, eligible, excludedMonths } = await aggregate(start, end, user, true);
+  const months = [...monthly.keys()].sort();
   // 이 달 통계 제외 교사는 목록·공정성 지표에서 뺀다
   const excluded = (teacherId: number) => excludedMonths.has(teacherId);
 
@@ -131,6 +143,14 @@ export async function getMonthStats(year: number, month: number, user: Authentic
         fridayTotal,
         total: weekdayTotal + fridayTotal,
         byGradeGroup: gradeGroupRecord(totals, t.id),
+        /** 이번 달 학년·그룹별 횟수 (이번달 금요일 횟수 표시용) */
+        monthByGradeGroup: gradeGroupRecord(period, t.id),
+        /** 초기 누계 (학년·그룹별) */
+        initialByGradeGroup: gradeGroupRecord(initial, t.id),
+        /** 월별 확정·마감 횟수 (배정이 있는 달만, 오래된 순) — 총횟수 마우스 오버용 */
+        monthly: months
+          .filter((ym) => monthly.get(ym)!.has(t.id))
+          .map((ym) => ({ month: ym, byGradeGroup: gradeGroupRecord(monthly.get(ym)!, t.id) })),
       };
     });
 

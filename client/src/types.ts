@@ -212,6 +212,12 @@ export interface StatsRow {
   total: number;
   /** key: '1:WEEKDAY' 형식 */
   byGradeGroup: Record<string, number>;
+  /** 이번 달 학년·그룹별 횟수 */
+  monthByGradeGroup: Record<string, number>;
+  /** 초기 누계 (학년·그룹별) */
+  initialByGradeGroup: Record<string, number>;
+  /** 월별 확정·마감 횟수 (배정이 있는 달만) */
+  monthly: { month: string; byGradeGroup: Record<string, number> }[];
 }
 
 export interface MonthStats {
