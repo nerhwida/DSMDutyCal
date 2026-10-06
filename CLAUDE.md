@@ -210,6 +210,10 @@ REQUIREMENTS.md의 데이터 모델(§4)에는 `Teacher.sortOrder` 하나만 있
     `advanceRotation` 한 뒤 후보에서 빼고 다시 뽑는다(밀린 차례에 넣지 않음). 남은 후보가 하나면 넘기지 않는다.
     부분 재편성에서는 범위 밖 월~목 셀이 크레딧을 쓰지 않은 것으로 계산되므로 넘김이 조금 많아질 수 있다.
     순환 순서 자체를 확인하는 엔진 테스트는 `NO_FRIDAY_SKIP`으로 이 옵션을 끈다.
+  - **배정 근거(`trace`)**: 엔진이 새로 배정한 칸마다 순번(`positionIn` — 그 그룹을 맡을 수 있는 활성 교사 순서, 교사 관리 화면 번호와 같음),
+    금요일 넘김(`passed`, 금요일 날짜), 그날 불가해 건너뜀(`skipped`, 새로 밀린 차례가 된 교사 + `firstViolation` 사유),
+    밀린 차례 배정(`owed`)을 남긴다. 서비스가 이름을 붙여(`nameTrace`) generate·regenerate 응답에 넣고, 달력의 결과 요약
+    `TraceTable`이 보여 준다. 저장하지 않으므로 편성 직후에만 볼 수 있다.
   - **"직전 운영일 감독자 후순위"**는 `options.avoidPreviousDay`이고 기본은 **꺼짐**이다.
     순번 기준보다 앞에 적용한다. 순번 다음에 두면 아무 효과가 없기 때문이다.
   - **미배정 셀은 행으로 저장하지 않는다** (`Assignment.teacherId`는 non-null). "EMPTY가 아닌 월에서
