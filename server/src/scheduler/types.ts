@@ -124,9 +124,29 @@ export interface FairnessStat {
   warning: boolean;
 }
 
+/**
+ * 배정 근거 (자동 편성 결과 요약 표시용). 이번 편성으로 새로 배정한 칸마다 하나.
+ * position = 그 학년·그룹 순환 순서에서의 번호 (교사 관리 화면의 순서와 같다, 1부터). 순서에 없으면 null.
+ */
+export interface AssignmentTrace {
+  date: string;
+  grade: Grade;
+  group: RotationGroup;
+  teacherId: number;
+  position: number | null;
+  /** 밀린 차례로 배정됨 (앞서 자기 순번에 불가해 건너뛴 교사) */
+  owed: boolean;
+  /** 금요일 감독으로 이번 차례를 넘긴 교사 (그 달 금요일 감독 날짜) */
+  passed: { teacherId: number; position: number | null; fridays: string[] }[];
+  /** 그날 감독할 수 없어 건너뛴 교사 (밀린 차례로 기억된다) */
+  skipped: { teacherId: number; position: number | null; reason: string }[];
+}
+
 export interface SchedulerResult {
   /** 대상 학년의 배정 결과 (유지분 포함). */
   assignments: PlannedAssignment[];
   warnings: SchedulerWarning[];
   fairness: FairnessStat[];
+  /** 새로 배정한 칸의 배정 근거 (날짜·학년 순) */
+  trace: AssignmentTrace[];
 }

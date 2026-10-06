@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext';
 import { Popover } from '../components/Popover';
 import { SwapPopover } from '../components/SwapPopover';
 import { QuickFillInput } from '../components/QuickFillInput';
+import { TraceTable } from '../components/TraceTable';
 import { ManagePopover } from '../components/ManagePopover';
 import { StatusPanel } from '../components/StatusPanel';
 import { RegeneratePopover } from '../components/RegeneratePopover';
@@ -737,6 +738,7 @@ function RegenerateSummary({ result, onClose }: { result: RegenerateResult; onCl
           ))}
         </details>
       )}
+      <TraceTable trace={result.trace} />
     </div>
   );
 }
@@ -784,6 +786,7 @@ function GenerateSummary({
           ))}
         </details>
       )}
+      <TraceTable trace={result.trace} />
     </div>
   );
 }

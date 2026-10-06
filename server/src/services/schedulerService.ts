@@ -19,6 +19,7 @@ import {
   unassignedReasons,
 } from '../scheduler/index.js';
 import type {
+  AssignmentTrace,
   CountEntry,
   ExistingAssignment,
   FairnessStat,
@@ -189,6 +190,33 @@ export async function afterSchoolDaysBetween(start: string, end: string): Promis
   return rows.map((r) => ({ date: r.date, grade: r.grade }));
 }
 
+/** 배정 근거 + 교사 이름 (자동 편성 결과 요약 표시용) */
+export interface NamedTrace {
+  date: string;
+  grade: Grade;
+  group: RotationGroup;
+  position: number | null;
+  teacherName: string;
+  owed: boolean;
+  passed: { name: string; position: number | null; fridays: string[] }[];
+  skipped: { name: string; position: number | null; reason: string }[];
+}
+
+function nameTrace(trace: AssignmentTrace[], teachers: SchedulerTeacher[]): NamedTrace[] {
+  const nameOf = new Map(teachers.map((t) => [t.id, t.name]));
+  const n = (id: number) => nameOf.get(id) ?? '?';
+  return trace.map((t) => ({
+    date: t.date,
+    grade: t.grade,
+    group: t.group,
+    position: t.position,
+    teacherName: n(t.teacherId),
+    owed: t.owed,
+    passed: t.passed.map((p) => ({ name: n(p.teacherId), position: p.position, fridays: p.fridays })),
+    skipped: t.skipped.map((s) => ({ name: n(s.teacherId), position: s.position, reason: s.reason })),
+  }));
+}
+
 export interface GenerateResult {
   year: number;
   month: number;
@@ -198,6 +226,8 @@ export interface GenerateResult {
   keptCount: number;
   warnings: SchedulerWarning[];
   fairness: FairnessStat[];
+  /** 새로 배정한 칸의 순번과 넘김·건너뜀 사유 */
+  trace: NamedTrace[];
 }
 
 /**
@@ -272,6 +302,7 @@ export async function generateMonthPlan(
     keptCount: keptDates.length,
     warnings: result.warnings,
     fairness: result.fairness,
+    trace: nameTrace(result.trace, input.teachers),
   };
 }
 
@@ -414,6 +445,7 @@ export async function regenerateMonthPlan(
         : w,
     ),
     fairness: result.fairness,
+    trace: nameTrace(result.trace, input.teachers),
   };
 }
 

@@ -132,6 +132,20 @@ export interface GenerateResult {
   keptCount: number;
   warnings: { date: string; grade: Grade; reasons: string[] }[];
   fairness: FairnessStat[];
+  /** 새로 배정한 칸의 순번과 넘김·건너뜀 사유 */
+  trace: AssignmentTrace[];
+}
+
+/** 배정 근거 (자동 편성 결과 요약) */
+export interface AssignmentTrace {
+  date: string;
+  grade: Grade;
+  group: RotationGroup;
+  position: number | null;
+  teacherName: string;
+  owed: boolean;
+  passed: { name: string; position: number | null; fridays: string[] }[];
+  skipped: { name: string; position: number | null; reason: string }[];
 }
 
 export interface Candidate {
@@ -242,6 +256,7 @@ export interface RegenerateResult {
   removedCount: number;
   warnings: { date: string; grade: Grade; reasons: string[] }[];
   fairness: FairnessStat[];
+  trace: AssignmentTrace[];
 }
 
 export interface HistoryRow {

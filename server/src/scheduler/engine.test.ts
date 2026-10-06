@@ -259,6 +259,36 @@ describe('Scheduler Engine (6.5)', () => {
     ]);
   });
 
+  it('배정 근거(trace): 순번, 금요일 넘김(금요일 날짜), 그날 불가해 건너뜀(사유), 밀린 차례를 남긴다', () => {
+    const a = teacher([1]);
+    const b = teacher([1]);
+    const c = teacher([1], { canFriday: false });
+    const d = teacher([1], { canFriday: false, unavailableDates: [{ date: '2026-10-05', reason: '출장' }] });
+    const result = generateSchedule(baseInput([a, b, c, d], { targetGrades: [1] }));
+    const at = (date: string) => result.trace.find((t) => t.date === date && t.grade === 1)!;
+
+    // 10/1: A(10/2·16·30 금)·B(10/9·23 금) 넘김 → 3번 C
+    expect(at('2026-10-01')).toMatchObject({
+      teacherId: c.id,
+      position: 3,
+      owed: false,
+      passed: [
+        { teacherId: a.id, position: 1, fridays: ['2026-10-02', '2026-10-16', '2026-10-30'] },
+        { teacherId: b.id, position: 2, fridays: ['2026-10-09', '2026-10-23'] },
+      ],
+      skipped: [],
+    });
+    // 10/5: 4번 D 출장 → 건너뛰고 1번 A가 넘김 → 2번 B가 넘김 → C
+    expect(at('2026-10-05')).toMatchObject({
+      teacherId: c.id,
+      skipped: [{ teacherId: d.id, position: 4, reason: '감독 불가일(출장)' }],
+    });
+    // 10/6: 밀린 차례 D
+    expect(at('2026-10-06')).toMatchObject({ teacherId: d.id, position: 4, owed: true });
+    // 금요일 칸도 근거가 남는다 (금요일 순서 번호)
+    expect(at('2026-10-02')).toMatchObject({ group: 'FRIDAY', teacherId: a.id, position: 1 });
+  });
+
   it('금요일 우선: 넘기면 맡을 사람이 없으면 넘기지 않고 배정한다', () => {
     const a = teacher([1]); // 혼자라 금요일도 월~목도 A
     const result = generateSchedule(baseInput([a], { targetGrades: [1] }));

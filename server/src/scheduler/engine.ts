@@ -5,6 +5,7 @@ import { excludedGradesByDate, gradeExclusions, operatingDays } from './operatin
 import { DEFAULT_HARD_RULES, firstViolation, gradeEligibility } from './rules.js';
 import { advanceRotation, selectTeacher } from './selection.js';
 import type {
+  AssignmentTrace,
   HardRule,
   PlannedAssignment,
   ScheduleContext,
@@ -91,8 +92,25 @@ export function generateSchedule(input: SchedulerInput, rules: HardRule[] = DEFA
   // 금요일 우선: 금요일을 먼저 모두 편성하고, 금요일 감독 1회마다 월~목 차례를 1번 넘긴다.
   const fridayFirst = input.options?.fridaySkipsWeekday ?? true;
   const fridayCredits = new Map<number, number>();
-  const addCredit = (teacherId: number) => fridayCredits.set(teacherId, (fridayCredits.get(teacherId) ?? 0) + 1);
-  if (fridayFirst) for (const a of kept) if (a.group === 'FRIDAY') addCredit(a.teacherId);
+  const fridayDates = new Map<number, string[]>(); // 배정 근거 표시용
+  const addCredit = (teacherId: number, date: string) => {
+    fridayCredits.set(teacherId, (fridayCredits.get(teacherId) ?? 0) + 1);
+    fridayDates.set(teacherId, [...(fridayDates.get(teacherId) ?? []), date].sort());
+  };
+  if (fridayFirst) for (const a of kept) if (a.group === 'FRIDAY') addCredit(a.teacherId, a.date);
+
+  // 배정 근거: 순번 = 그 그룹을 맡을 수 있는 활성 교사만 놓은 순서의 번호 (교사 관리 화면과 같다)
+  const trace: AssignmentTrace[] = [];
+  const teacherById = new Map(input.teachers.map((t) => [t.id, t]));
+  const positionIn = (grade: Grade, group: RotationGroup, teacherId: number): number | null => {
+    const visible = (rotationOrders.get(queueKey(grade, group)) ?? []).filter((id) => {
+      const t = teacherById.get(id);
+      const g = t?.grades.find((x) => x.grade === grade);
+      return !!t && t.active && !!g && (group === 'FRIDAY' ? g.canFriday : g.canWeekday);
+    });
+    const i = visible.indexOf(teacherId);
+    return i < 0 ? null : i + 1;
+  };
   const orderedDays = fridayFirst
     ? [...days.filter((d) => weekdayOf(d) === 5), ...days.filter((d) => weekdayOf(d) !== 5)]
     : days;
@@ -141,6 +159,8 @@ export function generateSchedule(input: SchedulerInput, rules: HardRule[] = DEFA
           deprioritized: input.options?.avoidPreviousDay ? previousDayTeachers : undefined,
           owed: owedByQueue.get(qKey),
         });
+      const owedBefore = [...(owedByQueue.get(qKey) ?? [])];
+      const passedList: AssignmentTrace['passed'] = [];
       let selected = select();
       // 월~목: 금요일 감독이 남은 교사는 이번 차례를 넘긴다 (차례는 쓴 것으로 보고 다음 교사를 고른다).
       // 넘기면 맡을 사람이 없는 경우(남은 후보가 그 교사뿐)에는 넘기지 않고 배정한다.
@@ -160,6 +180,7 @@ export function generateSchedule(input: SchedulerInput, rules: HardRule[] = DEFA
         if (passed.pointer !== null) pointers.set(qKey, passed.pointer);
         owedByQueue.set(qKey, passed.owed);
         const passedId = selected.id;
+        passedList.push({ teacherId: passedId, position: positionIn(grade, group, passedId), fridays: fridayDates.get(passedId) ?? [] });
         candidates = candidates.filter((t) => t.id !== passedId);
         selected = select();
       }
@@ -170,6 +191,7 @@ export function generateSchedule(input: SchedulerInput, rules: HardRule[] = DEFA
       }
 
       assignments.push({ date, grade, teacherId: selected.id, group, source: 'GENERATED' });
+      const fromOwed = (owedByQueue.get(qKey) ?? []).includes(selected.id);
       dayAssignments.set(grade, selected.id);
       const cKey = countKey(selected.id, grade, group);
       counts.set(cKey, (counts.get(cKey) ?? 0) + 1);
@@ -180,7 +202,26 @@ export function generateSchedule(input: SchedulerInput, rules: HardRule[] = DEFA
       );
       if (next.pointer !== null) pointers.set(qKey, next.pointer);
       owedByQueue.set(qKey, next.owed);
-      if (fridayFirst && group === 'FRIDAY') addCredit(selected.id);
+      if (fridayFirst && group === 'FRIDAY') addCredit(selected.id, date);
+
+      // 새로 밀린 차례가 된 교사 = 그날 불가해서 건너뛴 교사
+      const skipped = next.owed
+        .filter((id) => !owedBefore.includes(id))
+        .map((id) => {
+          const t = teacherById.get(id);
+          const reason = t ? (firstViolation(t, ctx, rules) ?? '직전 운영일 감독 후순위') : '알 수 없음';
+          return { teacherId: id, position: positionIn(grade, group, id), reason };
+        });
+      trace.push({
+        date,
+        grade,
+        group,
+        teacherId: selected.id,
+        position: positionIn(grade, group, selected.id),
+        owed: fromOwed,
+        passed: passedList,
+        skipped,
+      });
     }
 
     assignedOn.set(date, new Set(dayAssignments.values()));
@@ -188,7 +229,8 @@ export function generateSchedule(input: SchedulerInput, rules: HardRule[] = DEFA
 
   assignments.sort((a, b) => a.date.localeCompare(b.date) || a.grade - b.grade);
   const fairness = computeFairness(input.targetGrades, input.teachers, assignments, priorCountOf);
-  return { assignments, warnings, fairness };
+  trace.sort((a, b) => a.date.localeCompare(b.date) || a.grade - b.grade);
+  return { assignments, warnings, fairness, trace };
 }
 
 /** 미배정 사유: 해당 학년에 등록된 활성 교사별 제외 사유. */
