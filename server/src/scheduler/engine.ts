@@ -3,7 +3,7 @@ import { rotationGroupForWeekday, type Grade, type RotationGroup } from '../lib/
 import { computeFairness } from './fairness.js';
 import { excludedGradesByDate, gradeExclusions, operatingDays } from './operatingDays.js';
 import { DEFAULT_HARD_RULES, firstViolation, gradeEligibility } from './rules.js';
-import { selectTeacher } from './selection.js';
+import { advanceRotation, selectTeacher } from './selection.js';
 import type {
   HardRule,
   PlannedAssignment,
@@ -62,6 +62,8 @@ export function generateSchedule(input: SchedulerInput, rules: HardRule[] = DEFA
 
   const pointers = new Map<string, number>();
   for (const p of input.startPointers) pointers.set(queueKey(p.grade, p.group), p.teacherId);
+  // 밀린 차례 (학년·그룹별). 이번 편성 안에서만 이어진다.
+  const owedByQueue = new Map<string, number[]>();
 
   // 날짜별 고정 배정 (대상 외 학년 + 대상 학년 중 유지 셀)
   const fixedByDate = new Map<string, Map<Grade, number>>();
@@ -118,6 +120,7 @@ export function generateSchedule(input: SchedulerInput, rules: HardRule[] = DEFA
         pointer: pointers.get(qKey) ?? null,
         countOf: (teacherId) => counts.get(countKey(teacherId, grade, group)) ?? 0,
         deprioritized: input.options?.avoidPreviousDay ? previousDayTeachers : undefined,
+        owed: owedByQueue.get(qKey),
       });
 
       if (!selected) {
@@ -129,7 +132,13 @@ export function generateSchedule(input: SchedulerInput, rules: HardRule[] = DEFA
       dayAssignments.set(grade, selected.id);
       const cKey = countKey(selected.id, grade, group);
       counts.set(cKey, (counts.get(cKey) ?? 0) + 1);
-      pointers.set(qKey, selected.id);
+      const next = advanceRotation(
+        { pointer: pointers.get(qKey) ?? null, owed: owedByQueue.get(qKey) ?? [] },
+        rotationOrders.get(qKey) ?? [],
+        selected.id,
+      );
+      if (next.pointer !== null) pointers.set(qKey, next.pointer);
+      owedByQueue.set(qKey, next.owed);
     }
 
     previousDayTeachers = new Set(dayAssignments.values());

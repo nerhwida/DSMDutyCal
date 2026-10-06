@@ -229,18 +229,49 @@ describe('Scheduler Engine (6.5)', () => {
     expect(weekday.slice(4, 8)).toEqual([d.id, b.id, a.id, c.id]);
   });
 
+  it('밀린 차례: 자기 순번에 불가해서 건너뛴 교사는 다음 배정에서 먼저 맡는다 (박→이→전→정)', () => {
+    const [park, lee, jeon, jung] = Array.from({ length: 4 }, () => teacher([1]));
+    // 10/5(월) 이태용 차례인데 방과후 → 전현모가 맡고, 다음 날은 밀린 이태용, 그다음 정은진
+    lee.weekdayExclusions = [{ weekday: 1, reason: 'AFTER_SCHOOL' }];
+    const result = generateSchedule(
+      baseInput([park, lee, jeon, jung], {
+        targetGrades: [1],
+        afterSchoolDays: [{ date: '2026-10-05', grade: 1 }],
+      }),
+    );
+    const weekday = result.assignments.filter((x) => x.group === 'WEEKDAY');
+    expect(weekday.slice(0, 5).map((x) => [x.date, x.teacherId])).toEqual([
+      ['2026-10-01', park.id], // 목
+      ['2026-10-05', jeon.id], // 월: 이태용 방과후 → 전현모
+      ['2026-10-06', lee.id], // 화: 밀린 이태용
+      ['2026-10-07', jung.id], // 수: 정은진
+      ['2026-10-08', park.id], // 목: 다시 박아영
+    ]);
+  });
+
   it('순번 우선: 불가 교사는 건너뛰고 다음 순번 교사가 맡으며, 순환은 이어진다', () => {
     const teachers = Array.from({ length: 3 }, () => teacher([1]));
     const [a, b, c] = teachers;
     b.unavailableDates = [{ date: '2026-10-05', reason: '출장' }];
-    // 10/1(목) a, 10/5(월) b 출장 → c, 10/6(화) 포인터가 c 다음이므로 a
+    // 10/1(목) a, 10/5(월) b 출장 → c, 10/6(화) 밀린 b, 10/7(수) 포인터(c) 다음이므로 a
     const result = generateSchedule(baseInput(teachers, { targetGrades: [1] }));
     const weekday = result.assignments.filter((x) => x.group === 'WEEKDAY');
-    expect(weekday.slice(0, 3).map((x) => [x.date, x.teacherId])).toEqual([
+    expect(weekday.slice(0, 4).map((x) => [x.date, x.teacherId])).toEqual([
       ['2026-10-01', a.id],
       ['2026-10-05', c.id],
-      ['2026-10-06', a.id],
+      ['2026-10-06', b.id],
+      ['2026-10-07', a.id],
     ]);
+  });
+
+  it('밀린 차례 교사가 다음 날도 불가하면 차례를 계속 기억했다가 가능한 날 먼저 맡는다', () => {
+    const teachers = Array.from({ length: 3 }, () => teacher([1]));
+    const [a, b, c] = teachers;
+    b.unavailableDates = ['2026-10-05', '2026-10-06'].map((date) => ({ date, reason: '연수' }));
+    // 10/1 a, 10/5 b 불가 → c (b 밀림), 10/6 b 또 불가 → a, 10/7 밀린 b
+    const result = generateSchedule(baseInput(teachers, { targetGrades: [1] }));
+    const weekday = result.assignments.filter((x) => x.group === 'WEEKDAY');
+    expect(weekday.slice(0, 4).map((x) => x.teacherId)).toEqual([a.id, c.id, a.id, b.id]);
   });
 
   it('수동 변경 셀은 재편성 후에도 유지된다', () => {
