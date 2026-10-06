@@ -87,12 +87,28 @@ export function generateSchedule(input: SchedulerInput, rules: HardRule[] = DEFA
 
   const assignments: PlannedAssignment[] = [...kept];
   const warnings: SchedulerWarning[] = [];
-  let previousDayTeachers = new Set<number>();
 
-  for (const date of days) {
+  // 금요일 우선: 금요일을 먼저 모두 편성하고, 금요일 감독 1회마다 월~목 차례를 1번 넘긴다.
+  const fridayFirst = input.options?.fridaySkipsWeekday ?? true;
+  const fridayCredits = new Map<number, number>();
+  const addCredit = (teacherId: number) => fridayCredits.set(teacherId, (fridayCredits.get(teacherId) ?? 0) + 1);
+  if (fridayFirst) for (const a of kept) if (a.group === 'FRIDAY') addCredit(a.teacherId);
+  const orderedDays = fridayFirst
+    ? [...days.filter((d) => weekdayOf(d) === 5), ...days.filter((d) => weekdayOf(d) !== 5)]
+    : days;
+
+  // 직전 운영일 감독자 (옵션): 처리 순서가 아니라 날짜 순서상 바로 앞 운영일 기준
+  const assignedOn = new Map<string, Set<number>>();
+  const previousDayOf = (date: string) => {
+    const prev = days[days.indexOf(date) - 1];
+    return prev ? (assignedOn.get(prev) ?? new Set<number>()) : new Set<number>();
+  };
+
+  for (const date of orderedDays) {
     const weekday = weekdayOf(date);
     const group = rotationGroupForWeekday(weekday);
     const dayAssignments = new Map<number, number>(fixedByDate.get(date) ?? []);
+    const previousDayTeachers = previousDayOf(date);
 
     const inScope = scope === null || scope.has(date);
     const remaining = new Set<Grade>(
@@ -110,18 +126,43 @@ export function generateSchedule(input: SchedulerInput, rules: HardRule[] = DEFA
           chosen = { grade, ctx, candidates };
         }
       }
-      const { grade, ctx, candidates } = chosen!;
+      const { grade, ctx } = chosen!;
+      let candidates = chosen!.candidates;
       remaining.delete(grade);
 
       const qKey = queueKey(grade, group);
-      const selected = selectTeacher({
-        candidates,
-        rotationOrder: rotationOrders.get(qKey) ?? [],
-        pointer: pointers.get(qKey) ?? null,
-        countOf: (teacherId) => counts.get(countKey(teacherId, grade, group)) ?? 0,
-        deprioritized: input.options?.avoidPreviousDay ? previousDayTeachers : undefined,
-        owed: owedByQueue.get(qKey),
-      });
+      const order = rotationOrders.get(qKey) ?? [];
+      const select = () =>
+        selectTeacher({
+          candidates,
+          rotationOrder: order,
+          pointer: pointers.get(qKey) ?? null,
+          countOf: (teacherId) => counts.get(countKey(teacherId, grade, group)) ?? 0,
+          deprioritized: input.options?.avoidPreviousDay ? previousDayTeachers : undefined,
+          owed: owedByQueue.get(qKey),
+        });
+      let selected = select();
+      // 월~목: 금요일 감독이 남은 교사는 이번 차례를 넘긴다 (차례는 쓴 것으로 보고 다음 교사를 고른다).
+      // 넘기면 맡을 사람이 없는 경우(남은 후보가 그 교사뿐)에는 넘기지 않고 배정한다.
+      while (
+        fridayFirst &&
+        group === 'WEEKDAY' &&
+        selected &&
+        candidates.length > 1 &&
+        (fridayCredits.get(selected.id) ?? 0) > 0
+      ) {
+        fridayCredits.set(selected.id, fridayCredits.get(selected.id)! - 1);
+        const passed = advanceRotation(
+          { pointer: pointers.get(qKey) ?? null, owed: owedByQueue.get(qKey) ?? [] },
+          order,
+          selected.id,
+        );
+        if (passed.pointer !== null) pointers.set(qKey, passed.pointer);
+        owedByQueue.set(qKey, passed.owed);
+        const passedId = selected.id;
+        candidates = candidates.filter((t) => t.id !== passedId);
+        selected = select();
+      }
 
       if (!selected) {
         warnings.push({ date, grade, reasons: unassignedReasons(input.teachers, ctx, rules) });
@@ -139,9 +180,10 @@ export function generateSchedule(input: SchedulerInput, rules: HardRule[] = DEFA
       );
       if (next.pointer !== null) pointers.set(qKey, next.pointer);
       owedByQueue.set(qKey, next.owed);
+      if (fridayFirst && group === 'FRIDAY') addCredit(selected.id);
     }
 
-    previousDayTeachers = new Set(dayAssignments.values());
+    assignedOn.set(date, new Set(dayAssignments.values()));
   }
 
   assignments.sort((a, b) => a.date.localeCompare(b.date) || a.grade - b.grade);

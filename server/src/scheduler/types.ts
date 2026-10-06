@@ -86,6 +86,11 @@ export interface SchedulerInput {
   options?: {
     /** 6.3-3: 직전 운영일에 감독한 교사를 후순위로 둔다 (기본 false). */
     avoidPreviousDay?: boolean;
+    /**
+     * 금요일을 먼저 편성하고, 그 달 금요일 감독 1회마다 월~목 차례를 1번 넘긴다 (기본 true, 오너 요청).
+     * 넘긴 차례는 밀린 차례로 돌려주지 않는다.
+     */
+    fridaySkipsWeekday?: boolean;
   };
 }
 

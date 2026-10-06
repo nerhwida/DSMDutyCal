@@ -42,6 +42,9 @@ function baseInput(teachers: SchedulerTeacher[], overrides: Partial<SchedulerInp
   };
 }
 
+/** 금요일 우선·월~목 넘김을 끈 입력 (순환 순서 자체를 확인하는 테스트용). */
+const NO_FRIDAY_SKIP = { options: { fridaySkipsWeekday: false } } as const;
+
 /** 전 학년 특별 일정 (날짜별 1·2·3학년 3건). */
 const allGrades = (dates: string[]) => dates.flatMap((date) => [1, 2, 3].map((grade) => ({ date, grade })));
 
@@ -176,11 +179,13 @@ describe('Scheduler Engine (6.5)', () => {
       t.grades[0].weekdayOrder = i + 1;
       t.grades[0].fridayOrder = 4 - i;
     });
-    const withFridays = generateSchedule(baseInput(teachers, { targetGrades: [1] }));
+    const withFridays = generateSchedule(baseInput(teachers, {
+        ...NO_FRIDAY_SKIP, targetGrades: [1] }));
 
     // 금요일을 모두 특별 일정으로 막아도 월~목 배정은 동일해야 한다.
     const fridays = operatingDays(YEAR, MONTH, []).filter((d) => weekdayOf(d) === 5);
-    const withoutFridays = generateSchedule(baseInput(teachers, { targetGrades: [1], specialDays: allGrades(fridays) }));
+    const withoutFridays = generateSchedule(baseInput(teachers, {
+        ...NO_FRIDAY_SKIP, targetGrades: [1], specialDays: allGrades(fridays) }));
 
     const weekdayOnly = (r: typeof withFridays) =>
       r.assignments.filter((a) => a.group === 'WEEKDAY').map((a) => `${a.date}:${a.teacherId}`);
@@ -212,6 +217,7 @@ describe('Scheduler Engine (6.5)', () => {
 
     const result = generateSchedule(
       baseInput(teachers, {
+        ...NO_FRIDAY_SKIP,
         targetGrades: [1],
         priorCounts: [
           { teacherId: a.id, grade: 1, group: 'WEEKDAY', count: 0 },
@@ -229,12 +235,53 @@ describe('Scheduler Engine (6.5)', () => {
     expect(weekday.slice(4, 8)).toEqual([d.id, b.id, a.id, c.id]);
   });
 
+  it('금요일 우선: 금요일을 먼저 편성하고, 금요일 감독 1회마다 월~목 차례를 1번 넘긴다', () => {
+    // A·B만 금요일 가능. 10월 금요일(2·9·16·23·30일) = A,B,A,B,A → A 3회, B 2회 넘김
+    const a = teacher([1]);
+    const b = teacher([1]);
+    const c = teacher([1], { canFriday: false });
+    const d = teacher([1], { canFriday: false });
+    const result = generateSchedule(baseInput([a, b, c, d], { targetGrades: [1] }));
+
+    const friday = result.assignments.filter((x) => x.group === 'FRIDAY').map((x) => x.teacherId);
+    expect(friday).toEqual([a.id, b.id, a.id, b.id, a.id]);
+
+    const weekday = result.assignments.filter((x) => x.group === 'WEEKDAY');
+    expect(weekday.slice(0, 8).map((x) => [x.date, x.teacherId])).toEqual([
+      ['2026-10-01', c.id], // A·B 넘김
+      ['2026-10-05', d.id],
+      ['2026-10-06', c.id], // A·B 넘김
+      ['2026-10-07', d.id],
+      ['2026-10-08', b.id], // A 마지막 넘김, B는 넘김 다 씀
+      ['2026-10-12', c.id],
+      ['2026-10-13', d.id],
+      ['2026-10-14', a.id], // 이제 A도 차례대로
+    ]);
+  });
+
+  it('금요일 우선: 넘기면 맡을 사람이 없으면 넘기지 않고 배정한다', () => {
+    const a = teacher([1]); // 혼자라 금요일도 월~목도 A
+    const result = generateSchedule(baseInput([a], { targetGrades: [1] }));
+    expect(result.warnings).toHaveLength(0);
+    expect(result.assignments.every((x) => x.teacherId === a.id)).toBe(true);
+  });
+
+  it('금요일 우선 옵션을 끄면 금요일 감독과 관계없이 월~목 순서대로 배정한다', () => {
+    const a = teacher([1]);
+    const b = teacher([1]);
+    const c = teacher([1], { canFriday: false });
+    const result = generateSchedule(baseInput([a, b, c], { targetGrades: [1], ...NO_FRIDAY_SKIP }));
+    const weekday = result.assignments.filter((x) => x.group === 'WEEKDAY').map((x) => x.teacherId);
+    expect(weekday.slice(0, 3)).toEqual([a.id, b.id, c.id]);
+  });
+
   it('밀린 차례: 자기 순번에 불가해서 건너뛴 교사는 다음 배정에서 먼저 맡는다 (박→이→전→정)', () => {
     const [park, lee, jeon, jung] = Array.from({ length: 4 }, () => teacher([1]));
     // 10/5(월) 이태용 차례인데 방과후 → 전현모가 맡고, 다음 날은 밀린 이태용, 그다음 정은진
     lee.weekdayExclusions = [{ weekday: 1, reason: 'AFTER_SCHOOL' }];
     const result = generateSchedule(
       baseInput([park, lee, jeon, jung], {
+        ...NO_FRIDAY_SKIP,
         targetGrades: [1],
         afterSchoolDays: [{ date: '2026-10-05', grade: 1 }],
       }),
@@ -254,7 +301,8 @@ describe('Scheduler Engine (6.5)', () => {
     const [a, b, c] = teachers;
     b.unavailableDates = [{ date: '2026-10-05', reason: '출장' }];
     // 10/1(목) a, 10/5(월) b 출장 → c, 10/6(화) 밀린 b, 10/7(수) 포인터(c) 다음이므로 a
-    const result = generateSchedule(baseInput(teachers, { targetGrades: [1] }));
+    const result = generateSchedule(baseInput(teachers, {
+        ...NO_FRIDAY_SKIP, targetGrades: [1] }));
     const weekday = result.assignments.filter((x) => x.group === 'WEEKDAY');
     expect(weekday.slice(0, 4).map((x) => [x.date, x.teacherId])).toEqual([
       ['2026-10-01', a.id],
@@ -269,7 +317,8 @@ describe('Scheduler Engine (6.5)', () => {
     const [a, b, c] = teachers;
     b.unavailableDates = ['2026-10-05', '2026-10-06'].map((date) => ({ date, reason: '연수' }));
     // 10/1 a, 10/5 b 불가 → c (b 밀림), 10/6 b 또 불가 → a, 10/7 밀린 b
-    const result = generateSchedule(baseInput(teachers, { targetGrades: [1] }));
+    const result = generateSchedule(baseInput(teachers, {
+        ...NO_FRIDAY_SKIP, targetGrades: [1] }));
     const weekday = result.assignments.filter((x) => x.group === 'WEEKDAY');
     expect(weekday.slice(0, 4).map((x) => x.teacherId)).toEqual([a.id, c.id, a.id, b.id]);
   });
@@ -395,6 +444,7 @@ describe('Scheduler Engine 부가 동작', () => {
     const teachers = Array.from({ length: 4 }, () => teacher([1]));
     const result = generateSchedule(
       baseInput(teachers, {
+        ...NO_FRIDAY_SKIP,
         targetGrades: [1],
         startPointers: [{ grade: 1, group: 'WEEKDAY', teacherId: teachers[1].id }],
       }),
