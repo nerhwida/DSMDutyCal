@@ -699,8 +699,11 @@ export async function getMonthView(year: number, month: number, user: Authentica
 export interface RotationStatus {
   grade: Grade;
   group: RotationGroup;
-  /** 현재 순환 순서 (그 그룹을 맡을 수 있는 활성 교사만, 순번 순) */
-  order: { teacherId: number; name: string }[];
+  /**
+   * 현재 순환 순서 (그 그룹을 맡을 수 있는 활성 교사만, 순번 순).
+   * total/friday = 교사의 확정 통계 총횟수·금요일 횟수 (전 학년, 초기 누계 + 날짜 제한 없이 확정·마감된 배정, 미리보기 제외)
+   */
+  order: { teacherId: number; name: string; total: number; friday: number }[];
   /** 마지막 확정·마감 감독 (순환 포인터). 없으면 null → 순번 첫 교사부터 */
   last: { teacherId: number; name: string; date: string } | null;
   /** 다음 자동 편성이 시작할 교사 (그날 불가하면 엔진이 다음 교사로 넘어간다) */
@@ -715,12 +718,27 @@ export interface RotationStatus {
  * 포인터 교사가 순서에 없으면 순번 첫 교사부터.
  */
 export async function getRotationStatus(): Promise<RotationStatus[]> {
-  const [teachers, confirmedPlans] = await Promise.all([
+  const [teachers, confirmedPlans, initialCounts, allAssignments] = await Promise.all([
     prisma.teacher.findMany({ include: { teacherGrades: true } }),
     prisma.monthPlan.findMany({ where: { status: { in: CONFIRMED_STATUSES } } }),
+    prisma.initialCount.findMany(),
+    prisma.assignment.findMany({ select: { date: true, grade: true, teacherId: true, rotationGroup: true } }),
   ]);
   const confirmedKeys = new Set(confirmedPlans.map((p) => `${p.year}-${p.month}-${p.grade}`));
+  const isConfirmed = (a: { date: string; grade: number }) => {
+    const [y, m] = a.date.split('-').map(Number);
+    return confirmedKeys.has(`${y}-${m}-${a.grade}`);
+  };
   const nameOf = new Map(teachers.map((t) => [t.id, t.name]));
+
+  // 교사별 확정 통계 총횟수·금요일 횟수 (전 학년, 초기 누계 포함)
+  const totals = new Map<number, { total: number; friday: number }>();
+  const addCount = (teacherId: number, group: string, n: number) => {
+    const cur = totals.get(teacherId) ?? { total: 0, friday: 0 };
+    totals.set(teacherId, { total: cur.total + n, friday: cur.friday + (group === 'FRIDAY' ? n : 0) });
+  };
+  for (const c of initialCounts) addCount(c.teacherId, c.rotationGroup, c.count);
+  for (const a of allAssignments) if (isConfirmed(a)) addCount(a.teacherId, a.rotationGroup, 1);
   // 학년별 가장 최근 확정·마감 월의 남은 밀린 차례
   const latestPlan = (grade: number) =>
     confirmedPlans
@@ -741,15 +759,9 @@ export async function getRotationStatus(): Promise<RotationStatus[]> {
       const eligible = (x: (typeof full)[number]) => x.t.active && (group === 'FRIDAY' ? x.g.canFriday : x.g.canWeekday);
 
       // 마지막 확정·마감 배정 (해당 학년·그룹)
-      const rows = await prisma.assignment.findMany({
-        where: { grade, rotationGroup: group },
-        orderBy: { date: 'desc' },
-        select: { date: true, teacherId: true },
-      });
-      const lastRow = rows.find((a) => {
-        const [y, m] = a.date.split('-').map(Number);
-        return confirmedKeys.has(`${y}-${m}-${grade}`);
-      });
+      const lastRow = allAssignments
+        .filter((a) => a.grade === grade && a.rotationGroup === group && isConfirmed(a))
+        .sort((a, b) => b.date.localeCompare(a.date))[0];
 
       const pointerIdx = lastRow ? full.findIndex((x) => x.t.id === lastRow.teacherId) : -1;
       const owed = carry[group]
@@ -768,7 +780,12 @@ export async function getRotationStatus(): Promise<RotationStatus[]> {
       result.push({
         grade,
         group,
-        order: full.filter(eligible).map((x) => ({ teacherId: x.t.id, name: x.t.name })),
+        order: full.filter(eligible).map((x) => ({
+          teacherId: x.t.id,
+          name: x.t.name,
+          total: totals.get(x.t.id)?.total ?? 0,
+          friday: totals.get(x.t.id)?.friday ?? 0,
+        })),
         last: lastRow ? { teacherId: lastRow.teacherId, name: nameOf.get(lastRow.teacherId) ?? '?', date: lastRow.date } : null,
         next,
         owed,

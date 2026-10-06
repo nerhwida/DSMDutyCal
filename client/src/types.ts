@@ -338,7 +338,7 @@ export interface MakeupNote {
 export interface RotationStatus {
   grade: Grade;
   group: RotationGroup;
-  order: { teacherId: number; name: string }[];
+  order: { teacherId: number; name: string; total: number; friday: number }[];
   last: { teacherId: number; name: string; date: string } | null;
   next: { teacherId: number; name: string } | null;
   /** 지난 확정 월에서 이어받는 밀린 차례 */

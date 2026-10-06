@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
-import type { Grade, GradeHeadRef, MonthStats, RotationStatus, Teacher } from '../types';
-import { todayInSeoul } from '../lib/date';
+import type { Grade, GradeHeadRef, RotationStatus, Teacher } from '../types';
 import { WEEKDAY_LABEL } from '../types';
 import { OrderList } from '../components/OrderList';
 
@@ -13,8 +12,7 @@ export function TeacherManagementPage() {
   const { user } = useAuth();
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [gradeHeads, setGradeHeads] = useState<GradeHeadRef[]>([]);
-  // 교사별 총횟수·금요일 횟수 (모든 학년, 이번 달까지 확정분 + 초기 누계). 통계·달력 현황의 총횟수와 같은 값.
-  const [totals, setTotals] = useState<Map<number, { total: number; friday: number }>>(new Map());
+  // 순환 현황 (순서·다음 시작·밀린 차례 + 교사별 확정 통계 총횟수·금요일 횟수)
   const [rotation, setRotation] = useState<RotationStatus[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -25,17 +23,14 @@ export function TeacherManagementPage() {
 
   const load = useCallback(async () => {
     try {
-      const today = todayInSeoul();
-      const [t, gh, stats, rot] = await Promise.all([
+      const [t, gh, rot] = await Promise.all([
         api.get<Teacher[]>('/api/teachers'),
         api.get<{ grade: Grade; teacherId: number }[]>('/api/grade-heads'),
-        api.get<MonthStats>(`/api/stats?year=${Number(today.slice(0, 4))}&month=${Number(today.slice(5, 7))}`),
         api.get<RotationStatus[]>('/api/grades/rotation-status'),
       ]);
       setRotation(rot);
       setTeachers(t);
       setGradeHeads(gh);
-      setTotals(new Map(stats.rows.map((r) => [r.teacherId, { total: r.total, friday: r.fridayTotal }])));
     } catch (err) {
       setError(err instanceof Error ? err.message : '목록을 불러오지 못했습니다.');
     }
@@ -372,7 +367,7 @@ export function TeacherManagementPage() {
           <h3 className="mb-1 text-sm font-semibold text-slate-800">학년별 순환 순서 (드래그로 변경)</h3>
           <p className="mb-2 text-xs text-slate-500">
             자동 편성은 이 순서대로 돌아가며 배정합니다(그날 감독이 불가한 교사는 건너뜀). 오른쪽 숫자는 참고용으로, 월~목
-            순서는 총횟수, 금요일 순서는 금요일 횟수입니다 (전 학년 합계, 초기 누계 + 이번 달까지 확정된 감독 — 통계와 같은 기준).
+            순서는 총횟수, 금요일 순서는 금요일 횟수입니다 (전 학년 합계, 초기 누계 + 확정된 감독 전체 — 미리보기 제외).
           </p>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             {scopeGrades.map((g) => (
@@ -380,7 +375,6 @@ export function TeacherManagementPage() {
                 key={g}
                 grade={g}
                 teachers={teachers}
-                totals={totals}
                 rotation={rotation.filter((r) => r.grade === g)}
                 onReorder={(group, ids) => reorder(g, group, ids)}
               />
@@ -395,17 +389,21 @@ export function TeacherManagementPage() {
 function GradeOrderPanel({
   grade,
   teachers,
-  totals,
   rotation,
   onReorder,
 }: {
   grade: Grade;
   teachers: Teacher[];
-  totals: Map<number, { total: number; friday: number }>;
   rotation: RotationStatus[];
   onReorder: (group: 'WEEKDAY' | 'FRIDAY', teacherIds: number[]) => void;
 }) {
-  // 저장된 순번 순 (자동 편성이 이 순서대로 배정한다). 누계는 참고용으로 표시한다.
+  // 교사별 확정 통계 총횟수·금요일 횟수 (서버 순환 현황이 계산, 전 학년 같은 값)
+  const totalsOf = useMemo(() => {
+    const map = new Map<number, { total: number; friday: number }>();
+    for (const r of rotation) for (const o of r.order) map.set(o.teacherId, { total: o.total, friday: o.friday });
+    return map;
+  }, [rotation]);
+  // 저장된 순번 순 (자동 편성이 이 순서대로 배정한다). 횟수는 참고용으로 표시한다.
   const listOf = useCallback(
     (group: 'WEEKDAY' | 'FRIDAY') =>
       teachers
@@ -414,12 +412,12 @@ function GradeOrderPanel({
         .map((x) => ({
           teacherId: x.t.id,
           name: x.t.name,
-          // 월~목 목록은 총횟수, 금요일 목록은 금요일 횟수 (모두 전 학년 합계 — 통계·달력 현황과 같은 값)
-          total: group === 'WEEKDAY' ? (totals.get(x.t.id)?.total ?? 0) : (totals.get(x.t.id)?.friday ?? 0),
+          // 월~목 목록은 확정 통계 총횟수, 금요일 목록은 금요일 횟수 (전 학년, 초기 누계 + 확정·마감 전체)
+          total: group === 'WEEKDAY' ? (totalsOf.get(x.t.id)?.total ?? 0) : (totalsOf.get(x.t.id)?.friday ?? 0),
           order: group === 'WEEKDAY' ? x.tg!.weekdayOrder : x.tg!.fridayOrder,
         }))
         .sort((a, b) => a.order - b.order),
-    [teachers, totals, grade],
+    [teachers, totalsOf, grade],
   );
   const weekdayList = useMemo(() => listOf('WEEKDAY'), [listOf]);
   const fridayList = useMemo(() => listOf('FRIDAY'), [listOf]);
@@ -432,7 +430,7 @@ function GradeOrderPanel({
       <OrderList
         items={weekdayList}
         editable
-        totalTitle="총횟수 (전 학년 월~목+금, 초기 누계 포함 — 통계의 총횟수와 같음)"
+        totalTitle="확정 총횟수 (전 학년 월~목+금, 초기 누계 + 확정된 감독 전체, 미리보기 제외)"
         onReorder={(ids) => onReorder('WEEKDAY', ids)}
       />
       <p className="mb-1 mt-3 text-xs text-slate-500">금요일 순서</p>
@@ -440,7 +438,7 @@ function GradeOrderPanel({
       <OrderList
         items={fridayList}
         editable
-        totalTitle="금요일 횟수 (전 학년, 초기 누계 포함)"
+        totalTitle="확정 금요일 횟수 (전 학년, 초기 누계 + 확정된 감독 전체, 미리보기 제외)"
         onReorder={(ids) => onReorder('FRIDAY', ids)}
       />
     </div>

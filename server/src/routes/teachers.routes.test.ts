@@ -240,5 +240,7 @@ describe('GET /api/grades/rotation-status', () => {
     const ids = friday3.order.map((o: { teacherId: number }) => o.teacherId);
     expect(ids).toContain(x.id);
     expect(friday3.next.teacherId).toBe(ids[(ids.indexOf(x.id) + 1) % ids.length]);
+    // 순서 항목의 횟수 = 확정 통계 총횟수·금요일 횟수 (날짜 제한 없음: 2045년 확정분도 포함)
+    expect(friday3.order.find((o: { teacherId: number }) => o.teacherId === x.id)).toMatchObject({ total: 1, friday: 1 });
   });
 });
