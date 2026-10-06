@@ -149,6 +149,31 @@ describe('감독 초기화 (학년 단위)', () => {
   });
 });
 
+describe('밀린 차례 다음 달로 넘기기', () => {
+  it('자동 편성은 남은 밀린 차례를 저장하고, 다음 달 편성은 직전 확정 월의 밀린 차례를 이어받아 먼저 배정한다', async () => {
+    const x = await newTeacher('이월밀린차례', [3]);
+    const admin = await adminAgent();
+
+    // 3월(확정)에 X가 밀린 차례로 남았다고 가정
+    await prisma.monthPlan.create({
+      data: { year: 2041, month: 3, grade: 3, status: 'CONFIRMED', carryOwed: JSON.stringify({ WEEKDAY: [x.id], FRIDAY: [] }) },
+    });
+    const status = await admin.get('/api/grades/rotation-status');
+    const weekday3 = status.body.find((s: { grade: number; group: string }) => s.grade === 3 && s.group === 'WEEKDAY');
+    // 다른 테스트의 더 최근 확정 월이 있으면 그쪽이 기준이므로, 밀린 차례 표시는 그 경우에만 확인한다
+    if (weekday3.owed.length > 0) expect(weekday3.next.teacherId).toBe(weekday3.owed[0].teacherId);
+
+    const res = await admin.post('/api/months/2041/4/grades/3/generate');
+    expect(res.status).toBe(200);
+    const first = res.body.trace.find((t: { group: string }) => t.group === 'WEEKDAY');
+    expect(first).toMatchObject({ date: '2041-04-01', teacherName: x.name, owed: true });
+
+    // 4월 편성 결과의 남은 밀린 차례도 저장된다
+    const plan = await prisma.monthPlan.findUniqueOrThrow({ where: { year_month_grade: { year: 2041, month: 4, grade: 3 } } });
+    expect(JSON.parse(plan.carryOwed!)).toEqual({ WEEKDAY: expect.any(Array), FRIDAY: expect.any(Array) });
+  });
+});
+
 describe('부분 재편성 (F4)', () => {
   it('확정 월: 범위 안 셀만 바뀌고, 최초 교사는 유지(노란 표시)되며 이력은 남고 알림은 없다', async () => {
     const a = await newTeacher('재편성A');

@@ -58,6 +58,13 @@ export interface CountEntry {
 }
 
 /** 학년·그룹별 순환 포인터 시작 위치 = 직전에 배정된 교사. */
+/** 학년·그룹별 밀린 차례 (먼저 밀린 교사부터). */
+export interface OwedEntry {
+  grade: Grade;
+  group: RotationGroup;
+  teacherIds: number[];
+}
+
 export interface PointerEntry {
   grade: Grade;
   group: RotationGroup;
@@ -81,6 +88,8 @@ export interface SchedulerInput {
   existingAssignments: ExistingAssignment[];
   priorCounts: CountEntry[];
   startPointers: PointerEntry[];
+  /** 지난달에서 이어받는 밀린 차례 (학년·그룹별, 먼저 밀린 순). 가능한 첫날 순번보다 먼저 배정한다. */
+  startOwed?: OwedEntry[];
   /** 부분 재편성 범위. 지정 시 이 날짜들만 재편성하고 나머지 대상 학년 배정은 유지한다. */
   dates?: string[];
   options?: {
@@ -140,6 +149,8 @@ export interface AssignmentTrace {
   passed: { teacherId: number; position: number | null; fridays: string[] }[];
   /** 그날 감독할 수 없어 건너뛴 교사 (밀린 차례로 기억된다) */
   skipped: { teacherId: number; position: number | null; reason: string }[];
+  /** 이미 밀린 차례인데 그날도 감독할 수 없어 계속 기다리는 교사 */
+  waiting: { teacherId: number; position: number | null; reason: string }[];
 }
 
 export interface SchedulerResult {
@@ -149,4 +160,6 @@ export interface SchedulerResult {
   fairness: FairnessStat[];
   /** 새로 배정한 칸의 배정 근거 (날짜·학년 순) */
   trace: AssignmentTrace[];
+  /** 편성을 마친 뒤 남은 밀린 차례 (대상 학년, 그룹별). 다음 달 편성이 이어받는다. */
+  endOwed: OwedEntry[];
 }

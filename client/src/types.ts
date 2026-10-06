@@ -146,6 +146,8 @@ export interface AssignmentTrace {
   owed: boolean;
   passed: { name: string; position: number | null; fridays: string[] }[];
   skipped: { name: string; position: number | null; reason: string }[];
+  /** 이미 밀린 차례인데 그날도 불가해 계속 기다리는 교사 */
+  waiting: { name: string; position: number | null; reason: string }[];
 }
 
 export interface Candidate {
@@ -339,4 +341,6 @@ export interface RotationStatus {
   order: { teacherId: number; name: string }[];
   last: { teacherId: number; name: string; date: string } | null;
   next: { teacherId: number; name: string } | null;
+  /** 지난 확정 월에서 이어받는 밀린 차례 */
+  owed: { teacherId: number; name: string }[];
 }

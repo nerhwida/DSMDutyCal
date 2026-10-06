@@ -12,7 +12,8 @@ const shortDate = (date: string) => `${Number(date.slice(5, 7))}/${Number(date.s
 export function TraceTable({ trace }: { trace: AssignmentTrace[] }) {
   const [onlyNotes, setOnlyNotes] = useState(false);
   if (trace.length === 0) return null;
-  const hasNote = (t: AssignmentTrace) => t.owed || t.passed.length > 0 || t.skipped.length > 0;
+  const hasNote = (t: AssignmentTrace) =>
+    t.owed || t.passed.length > 0 || t.skipped.length > 0 || t.waiting.length > 0;
   const rows = onlyNotes ? trace.filter(hasNote) : trace;
   const noteCount = trace.filter(hasNote).length;
 
@@ -23,7 +24,7 @@ export function TraceTable({ trace }: { trace: AssignmentTrace[] }) {
       </summary>
       <label className="mt-1 flex items-center gap-1 text-slate-600">
         <input type="checkbox" checked={onlyNotes} onChange={(e) => setOnlyNotes(e.target.checked)} />
-        넘김·건너뜀·밀린 차례가 있는 칸만
+        넘김·건너뜀·밀린 차례·대기가 있는 칸만
       </label>
       <div className="mt-1 max-h-72 overflow-auto rounded border border-slate-200 bg-white">
         <table className="w-full min-w-[520px]">
@@ -43,6 +44,11 @@ export function TraceTable({ trace }: { trace: AssignmentTrace[] }) {
                 <td className="whitespace-nowrap px-2 py-1 font-medium text-slate-800">{who(t.position, t.teacherName)}</td>
                 <td className="px-2 py-1 text-slate-600">
                   {t.owed && <p className="text-sky-700">밀린 차례로 배정</p>}
+                  {t.waiting.length > 0 && (
+                    <p className="text-slate-500">
+                      밀린 차례 대기: {t.waiting.map((w) => `${who(w.position, w.name)}(${w.reason})`).join(', ')}
+                    </p>
+                  )}
                   {t.skipped.length > 0 && (
                     <p>
                       건너뜀: {t.skipped.map((s) => `${who(s.position, s.name)}(${s.reason})`).join(', ')}

@@ -146,6 +146,8 @@ model MonthPlan {
   confirmedById Int?
   closedAt      DateTime?
   closedById    Int?
+  /// 자동 편성이 끝날 때 남은 밀린 차례 (JSON: {"WEEKDAY": [teacherId…], "FRIDAY": […]}). 다음 달 편성이 이어받는다.
+  carryOwed     String?
 
   confirmedBy Teacher? @relation("ConfirmedBy", fields: [confirmedById], references: [id])
   closedBy    Teacher? @relation("ClosedBy", fields: [closedById], references: [id])

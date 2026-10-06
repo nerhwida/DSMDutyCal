@@ -65,6 +65,7 @@ export function generateSchedule(input: SchedulerInput, rules: HardRule[] = DEFA
   for (const p of input.startPointers) pointers.set(queueKey(p.grade, p.group), p.teacherId);
   // 밀린 차례 (학년·그룹별). 이번 편성 안에서만 이어진다.
   const owedByQueue = new Map<string, number[]>();
+  for (const o of input.startOwed ?? []) owedByQueue.set(queueKey(o.grade, o.group), [...o.teacherIds]);
 
   // 날짜별 고정 배정 (대상 외 학년 + 대상 학년 중 유지 셀)
   const fixedByDate = new Map<string, Map<Grade, number>>();
@@ -159,7 +160,18 @@ export function generateSchedule(input: SchedulerInput, rules: HardRule[] = DEFA
           deprioritized: input.options?.avoidPreviousDay ? previousDayTeachers : undefined,
           owed: owedByQueue.get(qKey),
         });
+      // 밀린 차례는 그 그룹을 맡을 수 있는 활성 교사만 기억한다 (금요일 체크가 없는 교사 등은 순번에 있어도 제외)
+      const onlyAssignable = (ids: number[]) => ids.filter((id) => positionIn(grade, group, id) !== null);
       const owedBefore = [...(owedByQueue.get(qKey) ?? [])];
+      const candidateIds = new Set(candidates.map((t) => t.id));
+      const reasonOf = (id: number) => {
+        const t = teacherById.get(id);
+        return t ? (firstViolation(t, ctx, rules) ?? '직전 운영일 감독 후순위') : '알 수 없음';
+      };
+      // 밀린 차례인데 그날 감독할 수 없는 교사 (계속 기다림)
+      const waiting = onlyAssignable(owedBefore)
+        .filter((id) => !candidateIds.has(id))
+        .map((id) => ({ teacherId: id, position: positionIn(grade, group, id), reason: reasonOf(id) }));
       const passedList: AssignmentTrace['passed'] = [];
       let selected = select();
       // 월~목: 금요일 감독이 남은 교사는 이번 차례를 넘긴다 (차례는 쓴 것으로 보고 다음 교사를 고른다).
@@ -178,7 +190,7 @@ export function generateSchedule(input: SchedulerInput, rules: HardRule[] = DEFA
           selected.id,
         );
         if (passed.pointer !== null) pointers.set(qKey, passed.pointer);
-        owedByQueue.set(qKey, passed.owed);
+        owedByQueue.set(qKey, onlyAssignable(passed.owed));
         const passedId = selected.id;
         passedList.push({ teacherId: passedId, position: positionIn(grade, group, passedId), fridays: fridayDates.get(passedId) ?? [] });
         candidates = candidates.filter((t) => t.id !== passedId);
@@ -201,17 +213,13 @@ export function generateSchedule(input: SchedulerInput, rules: HardRule[] = DEFA
         selected.id,
       );
       if (next.pointer !== null) pointers.set(qKey, next.pointer);
-      owedByQueue.set(qKey, next.owed);
+      owedByQueue.set(qKey, onlyAssignable(next.owed));
       if (fridayFirst && group === 'FRIDAY') addCredit(selected.id, date);
 
       // 새로 밀린 차례가 된 교사 = 그날 불가해서 건너뛴 교사
-      const skipped = next.owed
+      const skipped = onlyAssignable(next.owed)
         .filter((id) => !owedBefore.includes(id))
-        .map((id) => {
-          const t = teacherById.get(id);
-          const reason = t ? (firstViolation(t, ctx, rules) ?? '직전 운영일 감독 후순위') : '알 수 없음';
-          return { teacherId: id, position: positionIn(grade, group, id), reason };
-        });
+        .map((id) => ({ teacherId: id, position: positionIn(grade, group, id), reason: reasonOf(id) }));
       trace.push({
         date,
         grade,
@@ -221,6 +229,7 @@ export function generateSchedule(input: SchedulerInput, rules: HardRule[] = DEFA
         owed: fromOwed,
         passed: passedList,
         skipped,
+        waiting,
       });
     }
 
@@ -230,7 +239,15 @@ export function generateSchedule(input: SchedulerInput, rules: HardRule[] = DEFA
   assignments.sort((a, b) => a.date.localeCompare(b.date) || a.grade - b.grade);
   const fairness = computeFairness(input.targetGrades, input.teachers, assignments, priorCountOf);
   trace.sort((a, b) => a.date.localeCompare(b.date) || a.grade - b.grade);
-  return { assignments, warnings, fairness, trace };
+  // 남은 밀린 차례 (그 그룹을 맡을 수 있는 활성 교사만)
+  const endOwed = input.targetGrades.flatMap((grade) =>
+    (['WEEKDAY', 'FRIDAY'] as const).map((group) => ({
+      grade,
+      group,
+      teacherIds: (owedByQueue.get(queueKey(grade, group)) ?? []).filter((id) => positionIn(grade, group, id) !== null),
+    })),
+  );
+  return { assignments, warnings, fairness, trace, endOwed };
 }
 
 /** 미배정 사유: 해당 학년에 등록된 활성 교사별 제외 사유. */

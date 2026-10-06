@@ -663,9 +663,15 @@ function RotationSummary({ status }: { status?: RotationStatus }) {
           </span>
         ))}
       </p>
+      {status.owed.length > 0 && (
+        <p className="text-amber-700">
+          밀린 차례(지난달에서 이어짐): {status.owed.map((o) => o.name).join(', ')} — 다음 편성에서 가능한 첫날 먼저 맡습니다.
+        </p>
+      )}
       {status.next && (
         <p className="text-sky-700">
-          ▶ 다음 시작: <b>{status.next.name}</b> <span className="text-slate-400">({lastLabel})</span>
+          ▶ 다음 시작: <b>{status.next.name}</b>{' '}
+          <span className="text-slate-400">({status.owed.length > 0 ? '밀린 차례' : lastLabel})</span>
         </p>
       )}
     </div>

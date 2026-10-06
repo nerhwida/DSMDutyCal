@@ -289,6 +289,56 @@ describe('Scheduler Engine (6.5)', () => {
     expect(at('2026-10-02')).toMatchObject({ group: 'FRIDAY', teacherId: a.id, position: 1 });
   });
 
+  it('배정 근거(trace): 밀린 차례 교사가 그날도 불가하면 대기(waiting)로 사유를 남긴다', () => {
+    const [a, b, c, d] = Array.from({ length: 4 }, () => teacher([1]));
+    // B는 월·화 방과후, 10월 내내 1학년 방과후 운영일
+    b.weekdayExclusions = [
+      { weekday: 1, reason: 'AFTER_SCHOOL' },
+      { weekday: 2, reason: 'AFTER_SCHOOL' },
+    ];
+    const result = generateSchedule(
+      baseInput([a, b, c, d], {
+        ...NO_FRIDAY_SKIP,
+        targetGrades: [1],
+        afterSchoolDays: operatingDays(YEAR, MONTH, []).map((date) => ({ date, grade: 1 })),
+      }),
+    );
+    const at = (date: string) => result.trace.find((t) => t.date === date && t.grade === 1)!;
+    expect(at('2026-10-05')).toMatchObject({ teacherId: c.id, skipped: [{ teacherId: b.id, reason: '방과후 수업' }], waiting: [] });
+    // 10/6(화): 밀린 B가 또 방과후 → 대기, 순번대로 D
+    expect(at('2026-10-06')).toMatchObject({ teacherId: d.id, skipped: [], waiting: [{ teacherId: b.id, position: 2, reason: '방과후 수업' }] });
+    // 10/7(수): 밀린 B
+    expect(at('2026-10-07')).toMatchObject({ teacherId: b.id, owed: true, waiting: [] });
+  });
+
+  it('금요일을 맡지 않는 교사는 금요일 순번에서 건너뜀·밀린 차례로 기록하지 않는다', () => {
+    const a = teacher([1]);
+    const b = teacher([1], { canFriday: false });
+    const c = teacher([1]);
+    const result = generateSchedule(baseInput([a, b, c], { ...NO_FRIDAY_SKIP, targetGrades: [1] }));
+    const fridays = result.trace.filter((t) => t.group === 'FRIDAY');
+    expect(fridays.map((t) => t.teacherId).slice(0, 3)).toEqual([a.id, c.id, a.id]);
+    expect(fridays.every((t) => t.skipped.length === 0 && t.waiting.length === 0)).toBe(true);
+  });
+
+  it('밀린 차례 이어받기: 지난달에서 넘어온 교사가 가능한 첫날 먼저 맡고, 끝까지 못 맡으면 다음 달로 남긴다', () => {
+    const [a, b, c] = Array.from({ length: 3 }, () => teacher([1]));
+    // 지난달에서 C가 밀린 차례로 넘어옴 → 10/1(목) C 먼저, 이어서 순번대로 A
+    const carried = generateSchedule(
+      baseInput([a, b, c], { ...NO_FRIDAY_SKIP, targetGrades: [1], startOwed: [{ grade: 1, group: 'WEEKDAY', teacherIds: [c.id] }] }),
+    );
+    const weekday = carried.trace.filter((t) => t.group === 'WEEKDAY');
+    expect(weekday[0]).toMatchObject({ date: '2026-10-01', teacherId: c.id, owed: true });
+    expect(weekday[1]).toMatchObject({ teacherId: a.id, owed: false });
+
+    // B가 10/5 이후 계속 불가 → 차례에서 건너뛰고 끝까지 못 맡음 → endOwed에 남는다
+    b.unavailableDates = operatingDays(YEAR, MONTH, [])
+      .filter((d) => d >= '2026-10-05')
+      .map((date) => ({ date, reason: '연수' }));
+    const left = generateSchedule(baseInput([a, b, c], { ...NO_FRIDAY_SKIP, targetGrades: [1] }));
+    expect(left.endOwed).toContainEqual({ grade: 1, group: 'WEEKDAY', teacherIds: [b.id] });
+  });
+
   it('금요일 우선: 넘기면 맡을 사람이 없으면 넘기지 않고 배정한다', () => {
     const a = teacher([1]); // 혼자라 금요일도 월~목도 A
     const result = generateSchedule(baseInput([a], { targetGrades: [1] }));

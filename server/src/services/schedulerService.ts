@@ -21,6 +21,7 @@ import {
 import type {
   AssignmentTrace,
   CountEntry,
+  OwedEntry,
   ExistingAssignment,
   FairnessStat,
   PointerEntry,
@@ -168,8 +169,41 @@ export async function loadSchedulerInput(
     existingAssignments,
     priorCounts,
     startPointers: [...lastByQueue.values()],
+    startOwed: await carriedOwed(year, month, targetGrades),
     dates,
   };
+}
+
+/**
+ * 지난달에서 이어받는 밀린 차례: 학년별로 이번 달 이전의 가장 최근 확정·마감 월(MonthPlan.carryOwed).
+ * 자동 편성이 끝날 때 남은 밀린 차례를 저장해 두고 다음 달이 이어받는다 (오너 결정 B안, 2026-10-06).
+ */
+export async function carriedOwed(year: number, month: number, grades: readonly Grade[]): Promise<OwedEntry[]> {
+  const result: OwedEntry[] = [];
+  for (const grade of grades) {
+    const plan = await prisma.monthPlan.findFirst({
+      where: {
+        grade,
+        status: { in: CONFIRMED_STATUSES },
+        OR: [{ year: { lt: year } }, { year, month: { lt: month } }],
+      },
+      orderBy: [{ year: 'desc' }, { month: 'desc' }],
+    });
+    const parsed = parseCarry(plan?.carryOwed);
+    for (const group of ['WEEKDAY', 'FRIDAY'] as const) {
+      if (parsed[group].length > 0) result.push({ grade, group, teacherIds: parsed[group] });
+    }
+  }
+  return result;
+}
+
+function parseCarry(raw: string | null | undefined): Record<RotationGroup, number[]> {
+  try {
+    const v = raw ? (JSON.parse(raw) as Partial<Record<RotationGroup, number[]>>) : {};
+    return { WEEKDAY: v.WEEKDAY ?? [], FRIDAY: v.FRIDAY ?? [] };
+  } catch {
+    return { WEEKDAY: [], FRIDAY: [] };
+  }
 }
 
 /** [start, end] 기간의 편성 제외 (날짜 × 학년) = 특별 일정 + 방과후 운영일에 지정되지 않은 학년. */
@@ -200,6 +234,7 @@ export interface NamedTrace {
   owed: boolean;
   passed: { name: string; position: number | null; fridays: string[] }[];
   skipped: { name: string; position: number | null; reason: string }[];
+  waiting: { name: string; position: number | null; reason: string }[];
 }
 
 function nameTrace(trace: AssignmentTrace[], teachers: SchedulerTeacher[]): NamedTrace[] {
@@ -214,6 +249,7 @@ function nameTrace(trace: AssignmentTrace[], teachers: SchedulerTeacher[]): Name
     owed: t.owed,
     passed: t.passed.map((p) => ({ name: n(p.teacherId), position: p.position, fridays: p.fridays })),
     skipped: t.skipped.map((s) => ({ name: n(s.teacherId), position: s.position, reason: s.reason })),
+    waiting: t.waiting.map((w) => ({ name: n(w.teacherId), position: w.position, reason: w.reason })),
   }));
 }
 
@@ -277,10 +313,15 @@ export async function generateMonthPlan(
       })),
     });
 
+    // 편성을 마친 뒤 남은 밀린 차례 → 다음 달 편성이 이어받는다
+    const carry = JSON.stringify({
+      WEEKDAY: result.endOwed.find((o) => o.grade === grade && o.group === 'WEEKDAY')?.teacherIds ?? [],
+      FRIDAY: result.endOwed.find((o) => o.grade === grade && o.group === 'FRIDAY')?.teacherIds ?? [],
+    });
     await tx.monthPlan.upsert({
       where: { year_month_grade: { year, month, grade } },
-      update: { status: 'DRAFT' },
-      create: { year, month, grade, status: 'DRAFT' },
+      update: { status: 'DRAFT', carryOwed: carry },
+      create: { year, month, grade, status: 'DRAFT', carryOwed: carry },
     });
   });
 
@@ -516,7 +557,7 @@ export async function resetMonthPlan(year: number, month: number, grade: Grade, 
     }
     await tx.monthPlan.update({
       where: { year_month_grade: { year, month, grade } },
-      data: { status: 'EMPTY', confirmedAt: null, confirmedById: null },
+      data: { status: 'EMPTY', confirmedAt: null, confirmedById: null, carryOwed: null },
     });
     if (status === 'CONFIRMED' && teacherIds.length > 0) {
       await tx.notification.createMany({
@@ -664,6 +705,8 @@ export interface RotationStatus {
   last: { teacherId: number; name: string; date: string } | null;
   /** 다음 자동 편성이 시작할 교사 (그날 불가하면 엔진이 다음 교사로 넘어간다) */
   next: { teacherId: number; name: string } | null;
+  /** 지난 확정 월에서 이어받는 밀린 차례 (다음 편성 때 순번보다 먼저 배정) */
+  owed: { teacherId: number; name: string }[];
 }
 
 /**
@@ -678,9 +721,15 @@ export async function getRotationStatus(): Promise<RotationStatus[]> {
   ]);
   const confirmedKeys = new Set(confirmedPlans.map((p) => `${p.year}-${p.month}-${p.grade}`));
   const nameOf = new Map(teachers.map((t) => [t.id, t.name]));
+  // 학년별 가장 최근 확정·마감 월의 남은 밀린 차례
+  const latestPlan = (grade: number) =>
+    confirmedPlans
+      .filter((p) => p.grade === grade)
+      .sort((a, b) => b.year - a.year || b.month - a.month)[0];
 
   const result: RotationStatus[] = [];
   for (const grade of [1, 2, 3] as const) {
+    const carry = parseCarry(latestPlan(grade)?.carryOwed);
     for (const group of ['WEEKDAY', 'FRIDAY'] as const) {
       // 엔진의 순환 순서: 그 학년 행이 있는 모든 교사, 순번 → id 순
       const full = teachers
@@ -703,8 +752,12 @@ export async function getRotationStatus(): Promise<RotationStatus[]> {
       });
 
       const pointerIdx = lastRow ? full.findIndex((x) => x.t.id === lastRow.teacherId) : -1;
-      let next: RotationStatus['next'] = null;
-      for (let k = 1; k <= full.length; k++) {
+      const owed = carry[group]
+        .map((id) => full.find((x) => x.t.id === id))
+        .filter((x): x is (typeof full)[number] => !!x && eligible(x))
+        .map((x) => ({ teacherId: x.t.id, name: x.t.name }));
+      let next: RotationStatus['next'] = owed[0] ?? null;
+      for (let k = 1; !next && k <= full.length; k++) {
         const x = full[(pointerIdx + k + full.length) % full.length];
         if (eligible(x)) {
           next = { teacherId: x.t.id, name: x.t.name };
@@ -718,6 +771,7 @@ export async function getRotationStatus(): Promise<RotationStatus[]> {
         order: full.filter(eligible).map((x) => ({ teacherId: x.t.id, name: x.t.name })),
         last: lastRow ? { teacherId: lastRow.teacherId, name: nameOf.get(lastRow.teacherId) ?? '?', date: lastRow.date } : null,
         next,
+        owed,
       });
     }
   }
