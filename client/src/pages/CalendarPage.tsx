@@ -191,20 +191,6 @@ export function CalendarPage() {
     }
   }
 
-  async function closeMonth() {
-    if (!window.confirm(`${ym.month}월 ${actionGrade}학년을 마감할까요? 마감 후에는 재편성·셀 변경·본인 교체가 모두 차단되며, 해제는 관리자만 할 수 있습니다.`)) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await api.post(`/api/months/${ym.year}/${ym.month}/grades/${actionGrade}/close`);
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '월 마감에 실패했습니다.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function resetPlan() {
     const confirmedNote = actionStatus === 'CONFIRMED' ? ' 확정된 월이므로 배정되어 있던 교사들에게 알림이 발송되고,' : '';
     if (
@@ -313,11 +299,6 @@ export function CalendarPage() {
                 className="rounded border border-red-400 px-3 py-1.5 text-red-700 hover:bg-red-50 disabled:opacity-40"
               >
                 감독 초기화
-              </button>
-            )}
-            {actionStatus === 'CONFIRMED' && (
-              <button onClick={closeMonth} disabled={busy} className="rounded bg-slate-700 px-3 py-1.5 text-white disabled:opacity-40">
-                월 마감
               </button>
             )}
             {actionStatus === 'CLOSED' && user.isAdmin && (

@@ -459,24 +459,6 @@ export async function confirmMonthPlan(year: number, month: number, grade: Grade
 }
 
 /**
- * 월 마감 (F8). 담당 학년의 CONFIRMED 월만 CLOSED로 전환할 수 있다.
- * 마감 후에는 해당 학년·월의 재편성·셀 변경·본인 교체가 모두 차단된다.
- */
-export async function closeMonthPlan(year: number, month: number, grade: Grade, actorId: number) {
-  const status = await getPlanStatus(year, month, grade);
-  if (status !== 'CONFIRMED') {
-    const label = status === 'CLOSED' ? '이미 마감되었습니다' : '확정된 월만 마감할 수 있습니다';
-    throw new ServiceError(409, `${month}월 ${grade}학년: ${label}.`);
-  }
-  await prisma.monthPlan.update({
-    where: { year_month_grade: { year, month, grade } },
-    data: { status: 'CLOSED', closedAt: new Date(), closedById: actorId },
-  });
-  await recordAudit(actorId, 'CLOSE', { year, month, grade });
-  return { year, month, grade, status: 'CLOSED' as const };
-}
-
-/**
  * 감독 초기화 (학년 단위). 해당 월·학년의 배정을 모두 지우고 미편성(EMPTY)으로 되돌린다.
  * DRAFT·CONFIRMED만 가능하고 마감 월은 막는다. 배정 이력도 함께 지워지며(생성 편성과 동일),
  * 확정 월이면 배정되어 있던 교사들에게 알린다.
@@ -519,7 +501,10 @@ export async function resetMonthPlan(year: number, month: number, grade: Grade, 
   return { year, month, grade, status: 'EMPTY' as const, removedCount: ids.length };
 }
 
-/** 마감 해제 (F8). ADMIN 전용이며 본인 PIN을 다시 확인한다. CONFIRMED로 되돌린다. */
+/**
+ * 마감 해제 (F8). ADMIN 전용이며 본인 PIN을 다시 확인한다. CONFIRMED로 되돌린다.
+ * 월 마감 기능은 오너 결정으로 없앴다. 예전에 마감된 월을 되돌릴 수 있도록 해제만 남긴다.
+ */
 export async function reopenMonthPlan(year: number, month: number, grade: Grade, actorId: number, pin: string) {
   const actor = await prisma.teacher.findUniqueOrThrow({ where: { id: actorId } });
   if (!(await verifyPin(pin, actor.pinHash))) {

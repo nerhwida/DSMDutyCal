@@ -128,7 +128,7 @@ export function SettingsPage() {
         <h3 className="text-sm font-semibold text-slate-700">데이터 백업</h3>
         <p className="text-xs text-slate-500">
           교사·배정·이력 등 모든 데이터를 파일 하나(SQLite DB)로 내려받습니다. 서비스 중에도 안전하게 만들 수 있습니다.
-          정기적으로(예: 월 마감 후) 내려받아 학교 공유 드라이브 등에 보관하세요.
+          정기적으로(예: 매달 편성 확정 후) 내려받아 학교 공유 드라이브 등에 보관하세요.
         </p>
         <button onClick={() => download()} disabled={busy} className="rounded bg-slate-800 px-3 py-1.5 text-sm text-white disabled:opacity-40">
           백업 파일 내려받기

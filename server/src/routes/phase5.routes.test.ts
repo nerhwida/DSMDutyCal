@@ -56,18 +56,19 @@ function cell(date: string, grade: number, teacherId: number, extra: { originalT
 
 const reload = (id: number) => prisma.assignment.findUniqueOrThrow({ where: { id } });
 
-describe('월 마감 (F8)', () => {
-  it('마감된 월은 재편성·셀 변경·초기화·본인 교체·특별 일정 등록이 모두 차단된다 (Phase 5 완료 기준)', async () => {
+describe('월 마감 (F8) — 마감 기능은 없애고 예전 마감 월의 차단·해제만 남김', () => {
+  it('월 마감 API는 없다', async () => {
+    await setPlan(2033, 11, 1, 'CONFIRMED');
+    const head1 = await loginFixture('1학년부장', '1111');
+    expect((await head1.post('/api/months/2033/11/grades/1/close')).status).toBe(404);
+  });
+
+  it('(예전에) 마감된 월은 재편성·셀 변경·초기화·본인 교체·특별 일정 등록이 모두 차단된다', async () => {
     const a = await newTeacher('마감A');
     const b = await newTeacher('마감B');
-    await setPlan(2033, 2, 1, 'CONFIRMED');
+    await setPlan(2033, 2, 1, 'CLOSED');
     const x = await cell('2033-02-01', 1, a.id);
     const head1 = await loginFixture('1학년부장', '1111');
-
-    const close = await head1.post('/api/months/2033/2/grades/1/close');
-    expect(close.status).toBe(200);
-    expect(close.body.status).toBe('CLOSED');
-    expect((await head1.post('/api/months/2033/2/grades/1/close')).status).toBe(409);
 
     expect((await head1.post('/api/months/2033/2/grades/1/generate')).status).toBe(409);
     expect((await head1.post('/api/months/2033/2/grades/1/regenerate').send({ from: '2033-02-01', to: '2033-02-01' })).status).toBe(409);
@@ -84,19 +85,6 @@ describe('월 마감 (F8)', () => {
 
     const after = await reload(x.id);
     expect(after.teacherId).toBe(a.id);
-  });
-
-  it('확정되지 않은 월은 마감할 수 없다', async () => {
-    await setPlan(2033, 9, 1, 'DRAFT');
-    const head1 = await loginFixture('1학년부장', '1111');
-    expect((await head1.post('/api/months/2033/9/grades/1/close')).status).toBe(409);
-    expect((await head1.post('/api/months/2033/10/grades/1/close')).status).toBe(409); // EMPTY
-  });
-
-  it('2학년 부장은 1학년을 마감할 수 없다', async () => {
-    await setPlan(2033, 11, 1, 'CONFIRMED');
-    const head2 = await loginFixture('2학년부장', '2222');
-    expect((await head2.post('/api/months/2033/11/grades/1/close')).status).toBe(403);
   });
 
   it('마감 해제는 ADMIN만, PIN 재확인 후 가능하고 AuditLog에 남는다', async () => {

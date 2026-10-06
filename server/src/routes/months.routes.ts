@@ -5,7 +5,6 @@ import { handle } from '../lib/http.js';
 import { dateStringSchema, gradeSchema } from '../lib/validation.js';
 import { requireAdmin, requireAuth, requireGradeScope } from '../permissions/middleware.js';
 import {
-  closeMonthPlan,
   confirmMonthPlan,
   resetMonthPlan,
   generateMonthPlan,
@@ -82,17 +81,6 @@ monthsRouter.post(
         req.user!,
       ),
     );
-  }),
-);
-
-/** POST /api/months/:year/:month/grades/:grade/close — 월 마감 (ADMIN, 해당 학년부장). */
-monthsRouter.post(
-  '/:year/:month/grades/:grade/close',
-  validateGradeParams,
-  requireGradeScope((req) => Number(req.params.grade)),
-  handle(async (req, res) => {
-    const { year, month } = parseYearMonth(req).data!;
-    res.json(await closeMonthPlan(year, month, Number(req.params.grade) as Grade, req.user!.id));
   }),
 );
 
