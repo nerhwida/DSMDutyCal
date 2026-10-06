@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
-import type { Grade, GradeHeadRef, MonthStats, Teacher } from '../types';
+import type { Grade, GradeHeadRef, MonthStats, RotationStatus, Teacher } from '../types';
 import { todayInSeoul } from '../lib/date';
 import { WEEKDAY_LABEL } from '../types';
 import { OrderList } from '../components/OrderList';
@@ -15,6 +15,7 @@ export function TeacherManagementPage() {
   const [gradeHeads, setGradeHeads] = useState<GradeHeadRef[]>([]);
   // 교사별 총횟수·금요일 횟수 (모든 학년, 이번 달까지 확정분 + 초기 누계). 통계·달력 현황의 총횟수와 같은 값.
   const [totals, setTotals] = useState<Map<number, { total: number; friday: number }>>(new Map());
+  const [rotation, setRotation] = useState<RotationStatus[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
@@ -25,11 +26,13 @@ export function TeacherManagementPage() {
   const load = useCallback(async () => {
     try {
       const today = todayInSeoul();
-      const [t, gh, stats] = await Promise.all([
+      const [t, gh, stats, rot] = await Promise.all([
         api.get<Teacher[]>('/api/teachers'),
         api.get<{ grade: Grade; teacherId: number }[]>('/api/grade-heads'),
         api.get<MonthStats>(`/api/stats?year=${Number(today.slice(0, 4))}&month=${Number(today.slice(5, 7))}`),
+        api.get<RotationStatus[]>('/api/grades/rotation-status'),
       ]);
+      setRotation(rot);
       setTeachers(t);
       setGradeHeads(gh);
       setTotals(new Map(stats.rows.map((r) => [r.teacherId, { total: r.total, friday: r.fridayTotal }])));
@@ -378,6 +381,7 @@ export function TeacherManagementPage() {
                 grade={g}
                 teachers={teachers}
                 totals={totals}
+                rotation={rotation.filter((r) => r.grade === g)}
                 onReorder={(group, ids) => reorder(g, group, ids)}
               />
             ))}
@@ -392,11 +396,13 @@ function GradeOrderPanel({
   grade,
   teachers,
   totals,
+  rotation,
   onReorder,
 }: {
   grade: Grade;
   teachers: Teacher[];
   totals: Map<number, { total: number; friday: number }>;
+  rotation: RotationStatus[];
   onReorder: (group: 'WEEKDAY' | 'FRIDAY', teacherIds: number[]) => void;
 }) {
   // 저장된 순번 순 (자동 편성이 이 순서대로 배정한다). 누계는 참고용으로 표시한다.
@@ -422,6 +428,7 @@ function GradeOrderPanel({
     <div className="rounded border border-slate-200 bg-white p-3">
       <p className="mb-2 text-sm font-medium text-slate-700">{grade}학년</p>
       <p className="mb-1 text-xs text-slate-500">월~목 순서</p>
+      <RotationSummary status={rotation.find((r) => r.group === 'WEEKDAY')} />
       <OrderList
         items={weekdayList}
         editable
@@ -429,6 +436,7 @@ function GradeOrderPanel({
         onReorder={(ids) => onReorder('WEEKDAY', ids)}
       />
       <p className="mb-1 mt-3 text-xs text-slate-500">금요일 순서</p>
+      <RotationSummary status={rotation.find((r) => r.group === 'FRIDAY')} />
       <OrderList
         items={fridayList}
         editable
@@ -635,6 +643,31 @@ function ResetAllPinsPanel({ onDone, onError }: { onDone: (message: string) => v
           전체 초기화
         </button>
       </form>
+    </div>
+  );
+}
+
+/** 순환 현황 한 줄 요약: 이름-이름-… 순서와 다음 자동 편성 시작 교사 (서버가 엔진과 같은 규칙으로 계산). */
+function RotationSummary({ status }: { status?: RotationStatus }) {
+  if (!status || status.order.length === 0) return null;
+  const lastLabel = status.last
+    ? `${Number(status.last.date.slice(0, 4))}년 ${Number(status.last.date.slice(5, 7))}월 마지막 확정: ${status.last.name}`
+    : '확정된 감독 없음 → 1번부터';
+  return (
+    <div className="mb-1.5 rounded bg-slate-50 px-2 py-1 text-xs leading-relaxed text-slate-600">
+      <p>
+        {status.order.map((o, i) => (
+          <span key={o.teacherId}>
+            {i > 0 && <span className="text-slate-300">-</span>}
+            <span className={o.teacherId === status.next?.teacherId ? 'font-semibold text-sky-700' : ''}>{o.name}</span>
+          </span>
+        ))}
+      </p>
+      {status.next && (
+        <p className="text-sky-700">
+          ▶ 다음 시작: <b>{status.next.name}</b> <span className="text-slate-400">({lastLabel})</span>
+        </p>
+      )}
     </div>
   );
 }

@@ -622,3 +622,72 @@ export async function getMonthView(year: number, month: number, user: Authentica
     unassigned,
   };
 }
+
+export interface RotationStatus {
+  grade: Grade;
+  group: RotationGroup;
+  /** 현재 순환 순서 (그 그룹을 맡을 수 있는 활성 교사만, 순번 순) */
+  order: { teacherId: number; name: string }[];
+  /** 마지막 확정·마감 감독 (순환 포인터). 없으면 null → 순번 첫 교사부터 */
+  last: { teacherId: number; name: string; date: string } | null;
+  /** 다음 자동 편성이 시작할 교사 (그날 불가하면 엔진이 다음 교사로 넘어간다) */
+  next: { teacherId: number; name: string } | null;
+}
+
+/**
+ * 학년·그룹별 순환 현황 (교사 관리 화면 표시용). 다음 시작 교사는 엔진과 같은 규칙으로 계산한다:
+ * 마지막 확정·마감 배정 교사(포인터)의 다음 순번부터, 그 그룹을 맡을 수 있는 활성 교사.
+ * 포인터 교사가 순서에 없으면 순번 첫 교사부터.
+ */
+export async function getRotationStatus(): Promise<RotationStatus[]> {
+  const [teachers, confirmedPlans] = await Promise.all([
+    prisma.teacher.findMany({ include: { teacherGrades: true } }),
+    prisma.monthPlan.findMany({ where: { status: { in: CONFIRMED_STATUSES } } }),
+  ]);
+  const confirmedKeys = new Set(confirmedPlans.map((p) => `${p.year}-${p.month}-${p.grade}`));
+  const nameOf = new Map(teachers.map((t) => [t.id, t.name]));
+
+  const result: RotationStatus[] = [];
+  for (const grade of [1, 2, 3] as const) {
+    for (const group of ['WEEKDAY', 'FRIDAY'] as const) {
+      // 엔진의 순환 순서: 그 학년 행이 있는 모든 교사, 순번 → id 순
+      const full = teachers
+        .flatMap((t) => t.teacherGrades.filter((g) => g.grade === grade).map((g) => ({ t, g })))
+        .sort(
+          (a, b) =>
+            (group === 'FRIDAY' ? a.g.fridayOrder - b.g.fridayOrder : a.g.weekdayOrder - b.g.weekdayOrder) || a.t.id - b.t.id,
+        );
+      const eligible = (x: (typeof full)[number]) => x.t.active && (group === 'FRIDAY' ? x.g.canFriday : x.g.canWeekday);
+
+      // 마지막 확정·마감 배정 (해당 학년·그룹)
+      const rows = await prisma.assignment.findMany({
+        where: { grade, rotationGroup: group },
+        orderBy: { date: 'desc' },
+        select: { date: true, teacherId: true },
+      });
+      const lastRow = rows.find((a) => {
+        const [y, m] = a.date.split('-').map(Number);
+        return confirmedKeys.has(`${y}-${m}-${grade}`);
+      });
+
+      const pointerIdx = lastRow ? full.findIndex((x) => x.t.id === lastRow.teacherId) : -1;
+      let next: RotationStatus['next'] = null;
+      for (let k = 1; k <= full.length; k++) {
+        const x = full[(pointerIdx + k + full.length) % full.length];
+        if (eligible(x)) {
+          next = { teacherId: x.t.id, name: x.t.name };
+          break;
+        }
+      }
+
+      result.push({
+        grade,
+        group,
+        order: full.filter(eligible).map((x) => ({ teacherId: x.t.id, name: x.t.name })),
+        last: lastRow ? { teacherId: lastRow.teacherId, name: nameOf.get(lastRow.teacherId) ?? '?', date: lastRow.date } : null,
+        next,
+      });
+    }
+  }
+  return result;
+}

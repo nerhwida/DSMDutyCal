@@ -316,3 +316,12 @@ export interface MakeupNote {
   createdByName: string | null;
   canEdit: boolean;
 }
+
+/** 학년·그룹별 순환 현황 (교사 관리 화면) */
+export interface RotationStatus {
+  grade: Grade;
+  group: RotationGroup;
+  order: { teacherId: number; name: string }[];
+  last: { teacherId: number; name: string; date: string } | null;
+  next: { teacherId: number; name: string } | null;
+}

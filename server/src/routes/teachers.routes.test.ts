@@ -220,3 +220,25 @@ describe('POST /api/teachers/reset-pin-all', () => {
     }
   });
 });
+
+describe('GET /api/grades/rotation-status', () => {
+  it('학년·그룹별 순서와 마지막 확정 감독, 그 다음 순번의 다음 시작 교사를 준다', async () => {
+    const x = await prisma.teacher.create({ data: { name: `순환현황_${Date.now()}`, pinHash: 'x' } });
+    await prisma.teacherGrade.create({ data: { teacherId: x.id, grade: 3, canWeekday: true, canFriday: true, weekdayOrder: 5000, fridayOrder: 5000 } });
+    // 다른 테스트보다 늦은 날짜의 확정 금요일 배정 → 3학년 금요일 포인터
+    await prisma.monthPlan.create({ data: { year: 2045, month: 1, grade: 3, status: 'CONFIRMED' } });
+    await prisma.assignment.create({
+      data: { date: '2045-01-06', grade: 3, teacherId: x.id, originalTeacherId: x.id, rotationGroup: 'FRIDAY' },
+    });
+
+    const agent = await loginAgent(await findTeacherId('평교사'), '4444');
+    const res = await agent.get('/api/grades/rotation-status');
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(6);
+    const friday3 = res.body.find((s: { grade: number; group: string }) => s.grade === 3 && s.group === 'FRIDAY');
+    expect(friday3.last).toMatchObject({ teacherId: x.id, date: '2045-01-06' });
+    const ids = friday3.order.map((o: { teacherId: number }) => o.teacherId);
+    expect(ids).toContain(x.id);
+    expect(friday3.next.teacherId).toBe(ids[(ids.indexOf(x.id) + 1) % ids.length]);
+  });
+});

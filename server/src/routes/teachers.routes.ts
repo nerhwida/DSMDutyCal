@@ -19,6 +19,7 @@ import {
 } from '../permissions/middleware.js';
 import { handle } from '../lib/http.js';
 import { listTeacherAssignments } from '../services/assignmentService.js';
+import { getRotationStatus } from '../services/schedulerService.js';
 
 export const teachersRouter = Router();
 
@@ -371,6 +372,14 @@ const orderSchema = z.object({
 
 export const gradeOrderRouter = Router();
 gradeOrderRouter.use(requireAuth);
+
+/** GET /api/grades/rotation-status — 학년·그룹별 현재 순환 순서, 마지막 확정 감독, 다음 시작 교사 (로그인). */
+gradeOrderRouter.get(
+  '/rotation-status',
+  handle(async (_req, res) => {
+    res.json(await getRotationStatus());
+  }),
+);
 
 /** PUT /api/grades/:grade/order — 학년×요일그룹별 순환 순서 변경 (ADMIN, 해당 학년부장). */
 gradeOrderRouter.put(
