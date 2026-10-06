@@ -13,8 +13,8 @@ export function TeacherManagementPage() {
   const { user } = useAuth();
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [gradeHeads, setGradeHeads] = useState<GradeHeadRef[]>([]);
-  // 교사별 학년·그룹 누계 (이번 달까지 확정분 + 초기 누계). 순환 순서 목록 정렬에 쓴다.
-  const [totals, setTotals] = useState<Map<number, Record<string, number>>>(new Map());
+  // 교사별 총횟수·금요일 횟수 (모든 학년, 이번 달까지 확정분 + 초기 누계). 통계·달력 현황의 총횟수와 같은 값.
+  const [totals, setTotals] = useState<Map<number, { total: number; friday: number }>>(new Map());
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
@@ -32,7 +32,7 @@ export function TeacherManagementPage() {
       ]);
       setTeachers(t);
       setGradeHeads(gh);
-      setTotals(new Map(stats.rows.map((r) => [r.teacherId, r.byGradeGroup])));
+      setTotals(new Map(stats.rows.map((r) => [r.teacherId, { total: r.total, friday: r.fridayTotal }])));
     } catch (err) {
       setError(err instanceof Error ? err.message : '목록을 불러오지 못했습니다.');
     }
@@ -369,7 +369,7 @@ export function TeacherManagementPage() {
           <h3 className="mb-1 text-sm font-semibold text-slate-800">학년별 순환 순서 (드래그로 변경)</h3>
           <p className="mb-2 text-xs text-slate-500">
             자동 편성은 이 순서대로 돌아가며 배정합니다(그날 감독이 불가한 교사는 건너뜀). 오른쪽 숫자는 참고용으로, 월~목
-            순서는 그 학년 총횟수(월~목+금), 금요일 순서는 금요일 횟수입니다 (초기 누계 + 이번 달까지 확정된 감독).
+            순서는 총횟수, 금요일 순서는 금요일 횟수입니다 (전 학년 합계, 초기 누계 + 이번 달까지 확정된 감독 — 통계와 같은 기준).
           </p>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             {scopeGrades.map((g) => (
@@ -396,7 +396,7 @@ function GradeOrderPanel({
 }: {
   grade: Grade;
   teachers: Teacher[];
-  totals: Map<number, Record<string, number>>;
+  totals: Map<number, { total: number; friday: number }>;
   onReorder: (group: 'WEEKDAY' | 'FRIDAY', teacherIds: number[]) => void;
 }) {
   // 저장된 순번 순 (자동 편성이 이 순서대로 배정한다). 누계는 참고용으로 표시한다.
@@ -408,11 +408,8 @@ function GradeOrderPanel({
         .map((x) => ({
           teacherId: x.t.id,
           name: x.t.name,
-          // 월~목 목록은 이 학년의 총횟수(월~목+금), 금요일 목록은 금요일 횟수
-          total:
-            group === 'WEEKDAY'
-              ? (totals.get(x.t.id)?.[`${grade}:WEEKDAY`] ?? 0) + (totals.get(x.t.id)?.[`${grade}:FRIDAY`] ?? 0)
-              : (totals.get(x.t.id)?.[`${grade}:FRIDAY`] ?? 0),
+          // 월~목 목록은 총횟수, 금요일 목록은 금요일 횟수 (모두 전 학년 합계 — 통계·달력 현황과 같은 값)
+          total: group === 'WEEKDAY' ? (totals.get(x.t.id)?.total ?? 0) : (totals.get(x.t.id)?.friday ?? 0),
           order: group === 'WEEKDAY' ? x.tg!.weekdayOrder : x.tg!.fridayOrder,
         }))
         .sort((a, b) => a.order - b.order),
@@ -428,14 +425,14 @@ function GradeOrderPanel({
       <OrderList
         items={weekdayList}
         editable
-        totalTitle={`총횟수 (${grade}학년 월~목+금, 초기 누계 포함)`}
+        totalTitle="총횟수 (전 학년 월~목+금, 초기 누계 포함 — 통계의 총횟수와 같음)"
         onReorder={(ids) => onReorder('WEEKDAY', ids)}
       />
       <p className="mb-1 mt-3 text-xs text-slate-500">금요일 순서</p>
       <OrderList
         items={fridayList}
         editable
-        totalTitle={`금요일 횟수 (${grade}학년, 초기 누계 포함)`}
+        totalTitle="금요일 횟수 (전 학년, 초기 누계 포함)"
         onReorder={(ids) => onReorder('FRIDAY', ids)}
       />
     </div>
