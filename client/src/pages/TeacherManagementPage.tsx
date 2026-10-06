@@ -368,8 +368,8 @@ export function TeacherManagementPage() {
         <div>
           <h3 className="mb-1 text-sm font-semibold text-slate-800">학년별 순환 순서 (드래그로 변경)</h3>
           <p className="mb-2 text-xs text-slate-500">
-            자동 편성은 이 순서대로 돌아가며 배정합니다(그날 감독이 불가한 교사는 건너뜀). 오른쪽 숫자는 참고용 누계입니다
-            (초기 누계 + 이번 달까지 확정·마감된 해당 학년·그룹 감독).
+            자동 편성은 이 순서대로 돌아가며 배정합니다(그날 감독이 불가한 교사는 건너뜀). 오른쪽 숫자는 참고용으로, 월~목
+            순서는 그 학년 총횟수(월~목+금), 금요일 순서는 금요일 횟수입니다 (초기 누계 + 이번 달까지 확정된 감독).
           </p>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             {scopeGrades.map((g) => (
@@ -408,7 +408,11 @@ function GradeOrderPanel({
         .map((x) => ({
           teacherId: x.t.id,
           name: x.t.name,
-          total: totals.get(x.t.id)?.[`${grade}:${group}`] ?? 0,
+          // 월~목 목록은 이 학년의 총횟수(월~목+금), 금요일 목록은 금요일 횟수
+          total:
+            group === 'WEEKDAY'
+              ? (totals.get(x.t.id)?.[`${grade}:WEEKDAY`] ?? 0) + (totals.get(x.t.id)?.[`${grade}:FRIDAY`] ?? 0)
+              : (totals.get(x.t.id)?.[`${grade}:FRIDAY`] ?? 0),
           order: group === 'WEEKDAY' ? x.tg!.weekdayOrder : x.tg!.fridayOrder,
         }))
         .sort((a, b) => a.order - b.order),
@@ -421,9 +425,19 @@ function GradeOrderPanel({
     <div className="rounded border border-slate-200 bg-white p-3">
       <p className="mb-2 text-sm font-medium text-slate-700">{grade}학년</p>
       <p className="mb-1 text-xs text-slate-500">월~목 순서</p>
-      <OrderList items={weekdayList} editable onReorder={(ids) => onReorder('WEEKDAY', ids)} />
+      <OrderList
+        items={weekdayList}
+        editable
+        totalTitle={`총횟수 (${grade}학년 월~목+금, 초기 누계 포함)`}
+        onReorder={(ids) => onReorder('WEEKDAY', ids)}
+      />
       <p className="mb-1 mt-3 text-xs text-slate-500">금요일 순서</p>
-      <OrderList items={fridayList} editable onReorder={(ids) => onReorder('FRIDAY', ids)} />
+      <OrderList
+        items={fridayList}
+        editable
+        totalTitle={`금요일 횟수 (${grade}학년, 초기 누계 포함)`}
+        onReorder={(ids) => onReorder('FRIDAY', ids)}
+      />
     </div>
   );
 }

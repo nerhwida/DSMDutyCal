@@ -3,7 +3,7 @@ import { useState } from 'react';
 interface OrderItem {
   teacherId: number;
   name: string;
-  /** 누계 (참고용 표시). */
+  /** 횟수 (참고용 표시). */
   total?: number;
 }
 
@@ -11,10 +11,13 @@ interface OrderItem {
 export function OrderList({
   items,
   editable,
+  totalTitle = '누계',
   onReorder,
 }: {
   items: OrderItem[];
   editable: boolean;
+  /** 횟수에 마우스를 올렸을 때 설명 */
+  totalTitle?: string;
   onReorder: (teacherIds: number[]) => void;
 }) {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -53,7 +56,7 @@ export function OrderList({
             <span className="w-5 text-right text-xs text-slate-400">{index + 1}</span>
             <span>{item.name}</span>
             {item.total !== undefined && (
-              <span className="ml-auto text-xs text-slate-400" title="누계">
+              <span className="ml-auto text-xs text-slate-400" title={totalTitle}>
                 {item.total}회
               </span>
             )}
