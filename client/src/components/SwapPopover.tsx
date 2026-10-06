@@ -27,10 +27,10 @@ export function SwapPopover({ assignment, onDone, onCancel }: SwapPopoverProps) 
   useEffect(() => {
     api
       .get<CandidatesResponse>(`/api/assignments/${assignment.id}/candidates`)
-      // 관리자 계정은 빼고 이름 오름차순
+      // 관리자 계정과 감독 가능 학년(교사 관리의 학년 체크)이 없는 교사는 빼고 이름 오름차순
       .then((res) =>
         setCandidates(
-          res.candidates.filter((c) => !c.isCurrent && !c.isAdmin).sort((a, b) => a.name.localeCompare(b.name, 'ko')),
+          res.candidates.filter((c) => !c.isCurrent && !c.isAdmin && c.grades.length > 0).sort((a, b) => a.name.localeCompare(b.name, 'ko')),
         ),
       )
       .catch((err) => setError(err instanceof Error ? err.message : '교사 목록을 불러오지 못했습니다.'));

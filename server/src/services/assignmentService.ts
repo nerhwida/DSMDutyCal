@@ -167,7 +167,11 @@ async function evaluateActiveTeachers(cell: { date: string; grade: number }, exc
   });
   const monthCount = new Map(monthRows.map((r) => [r.teacherId, r._count._all]));
   // 팝오버에서 학년별로 묶어 보여 주기 위한 담당 학년
-  const teacherGrades = await prisma.teacherGrade.findMany({ where: { teacherId: { in: activeIds } }, orderBy: { grade: 'asc' } });
+  // 교사 관리에서 월~목 또는 금이 체크된 학년만 (체크를 모두 해제해도 행은 남으므로 플래그로 거른다)
+  const teacherGrades = await prisma.teacherGrade.findMany({
+    where: { teacherId: { in: activeIds }, OR: [{ canWeekday: true }, { canFriday: true }] },
+    orderBy: { grade: 'asc' },
+  });
   const gradesOf = new Map<number, number[]>();
   for (const tg of teacherGrades) gradesOf.set(tg.teacherId, [...(gradesOf.get(tg.teacherId) ?? []), tg.grade]);
   return evaluations.map((e) => ({

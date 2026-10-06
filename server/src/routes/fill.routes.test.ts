@@ -128,6 +128,20 @@ describe('미배정 칸 직접 지정', () => {
     expect(kept).toMatchObject({ id: res.body.id, teacherId: t.id });
   });
 
+  it('후보 목록의 담당 학년은 교사 관리에서 월~목·금이 체크된 학년만이다', async () => {
+    const t = await newTeacher('학년체크', [1]);
+    // 2학년 행은 있지만 월~목·금 모두 체크 해제
+    await prisma.teacherGrade.create({ data: { teacherId: t.id, grade: 2, canWeekday: false, canFriday: false, weekdayOrder: 999, fridayOrder: 999 } });
+    const unchecked = await newTeacher('학년모두해제', []);
+    await prisma.teacherGrade.create({ data: { teacherId: unchecked.id, grade: 1, canWeekday: false, canFriday: false, weekdayOrder: 999, fridayOrder: 999 } });
+
+    const admin = await loginFixture(process.env.ADMIN_NAME!, process.env.ADMIN_INITIAL_PIN!);
+    const res = await admin.get('/api/assignments/candidates?date=2034-05-01&grade=1');
+    const find = (id: number) => res.body.candidates.find((c: { teacherId: number }) => c.teacherId === id);
+    expect(find(t.id).grades).toEqual([1]);
+    expect(find(unchecked.id).grades).toEqual([]);
+  });
+
   it('불가 사유가 있는 교사는 강제 배정일 때만, 같은 날 다른 학년 감독 중이면 강제로도 불가', async () => {
     const busy = await newTeacher('출장', [1]);
     const dual = await newTeacher('겸임', [1, 2]);
