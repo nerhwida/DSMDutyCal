@@ -178,6 +178,9 @@ REQUIREMENTS.md의 데이터 모델(§4)에는 `Teacher.sortOrder` 하나만 있
 - `weekdayOrder`/`fridayOrder`를 `Teacher`가 아니라 `TeacherGrade`에 직접 추가했다. 그래서
   (교사, 학년) 행마다 월~목 큐와 금요일 큐의 위치를 각각 가진다.
 - `PUT /api/grades/:grade/order`는 두 필드 중 하나를 한 번에 재정렬한다.
+- `GET /api/grades/rotation-status`(`schedulerService.getRotationStatus`)는 교사 관리 화면의 `순서 / ▶ 다음 시작` 요약용이다.
+  다음 시작은 엔진과 같은 규칙(마지막 확정·마감 배정 교사의 다음 순번 중 그 그룹을 맡을 수 있는 활성 교사)으로 계산한다.
+  엔진의 순서·포인터 규칙을 바꾸면 이 함수도 함께 맞춘다.
 - 스케줄러 엔진은 §6.3에 따라 이 순서를 **가장 먼저** 본다 (순번 우선, 아래 참고).
 
 ### 스케줄러 엔진 (Phase 3)
