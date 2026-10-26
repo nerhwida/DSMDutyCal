@@ -13,7 +13,7 @@ type Mode = 'transfer' | 'swap';
 
 /** F1-2 본인 감독 교체 팝오버 (넘기기 / 맞교환). */
 export function SwapPopover({ assignment, onDone, onCancel }: SwapPopoverProps) {
-  const [mode, setMode] = useState<Mode>('transfer');
+  const [mode, setMode] = useState<Mode>('swap');
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [search, setSearch] = useState('');
   const [teacherId, setTeacherId] = useState<number | null>(null);
@@ -100,7 +100,7 @@ export function SwapPopover({ assignment, onDone, onCancel }: SwapPopoverProps) 
       </div>
 
       <div className="flex gap-4 border-b border-slate-100 pb-2">
-        {(['transfer', 'swap'] as const).map((m) => (
+        {(['swap', 'transfer'] as const).map((m) => (
           <label key={m} className="flex items-center gap-1">
             <input
               type="radio"
