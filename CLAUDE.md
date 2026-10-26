@@ -238,6 +238,13 @@ REQUIREMENTS.md의 데이터 모델(§4)에는 `Teacher.sortOrder` 하나만 있
   - **본인 넘기기·맞교환(F1-2):** CONFIRMED 월만 가능하다.
     - 경고가 있으면 `confirmWarnings: true`가 필요하다. 없으면 409 `{ requiresConfirmation, warnings }`.
     - ADMIN·학년부장이 본인 셀을 교체해도 이력의 역할은 `TEACHER`로 기록한다.
+  - **교체 취소(되돌리기)**(`undoChange`, `POST /api/assignments/history/:historyId/undo`, '내 감독' 교체 이력의 `되돌리기` 버튼):
+    - 교사가 한 넘기기·맞교환(`changedByRole = TEACHER`, from 있음)만, 확정 월에서, 그 뒤로 해당 셀에 다른 이력이 없고
+      현재 교사가 받은 교사일 때만 가능하다. 맞교환은 `swapGroupId` 묶음을 함께 되돌린다.
+    - 권한: 교체한 본인(`changedById`) 또는 관련 셀 전 학년의 `gradeHeadOf`. 받은 교사는 되돌릴 수 없다.
+    - 원래 교사 평가는 차단 규칙만 본다(경고는 다시 묻지 않음). 이력은 지우지 않고 메모 `교체 취소`, `revertOfId`(원 이력, unique)
+      행을 남긴다. 되돌린 이력과 되돌림 행은 다시 되돌릴 수 없다. 관련 교사·실제 부장에게 알림.
+    - `/api/me/history` 응답의 `canUndo`/`undone`, 종류 `UNDO`가 화면 표시에 쓰인다.
   - **관리 변경(F6, `PUT /api/assignments/:id`):** CLOSED를 제외한 모든 상태에서 가능하다.
     - 경고가 있으면 `force: true`가 필요하다 (없으면 409 `{ requiresForce }`).
     - **OnePerDay는 강제로도 풀 수 없다** (한 교사의 같은 날 이중 배정은 물리적으로 불가하다는 결정).
