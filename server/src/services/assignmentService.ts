@@ -312,8 +312,8 @@ export async function listTeacherAssignments(
   return result;
 }
 
-/** 본인 관련 교체 이력 (넘긴 감독 / 넘겨받은 감독 / 맞교환). */
-export async function listMyHistory(teacherId: number) {
+/** 본인 관련 교체 이력 (넘긴 감독 / 넘겨받은 감독 / 맞교환 / 교체 취소). */
+export async function listMyHistory(teacherId: number, user: AuthenticatedUser) {
   const rows = await prisma.assignmentHistory.findMany({
     where: { OR: [{ fromTeacherId: teacherId }, { toTeacherId: teacherId }] },
     include: {
@@ -321,19 +321,23 @@ export async function listMyHistory(teacherId: number) {
       fromTeacher: { select: { name: true } },
       toTeacher: { select: { name: true } },
       changedBy: { select: { name: true } },
+      revertedBy: { select: { id: true } },
     },
     orderBy: { changedAt: 'desc' },
     take: 100,
   });
+  const undoable = await undoableIds(prisma, rows, user);
   return rows.map((h) => ({
     id: h.id,
-    kind: h.swapGroupId
-      ? 'SWAP'
-      : h.fromTeacherId === teacherId
-        ? 'GAVE'
-        : h.fromTeacherId === null
-          ? 'ASSIGNED' // 미배정 칸에 지정됨
-          : 'RECEIVED',
+    kind: h.revertOfId
+      ? 'UNDO'
+      : h.swapGroupId
+        ? 'SWAP'
+        : h.fromTeacherId === teacherId
+          ? 'GAVE'
+          : h.fromTeacherId === null
+            ? 'ASSIGNED' // 미배정 칸에 지정됨
+            : 'RECEIVED',
     date: h.assignment.date,
     grade: h.assignment.grade,
     fromTeacherName: h.fromTeacher?.name ?? null, // null = 미배정 칸을 채운 경우
@@ -341,6 +345,8 @@ export async function listMyHistory(teacherId: number) {
     changedByName: h.changedBy.name,
     changedAt: h.changedAt,
     note: h.note,
+    undone: h.revertedBy !== null,
+    canUndo: undoable.has(h.id),
   }));
 }
 
@@ -622,5 +628,153 @@ export async function swapAssignments(
         .map((teacherId) => ({ teacherId, type: 'SWAPPED' as const, message: `[맞교환] ${summary}` })),
     ]);
     return { swapGroupId, assignments: updated };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 교체 취소 (넘기기·맞교환 되돌리기) — 교체한 교사 본인, 해당 학년부장, ADMIN
+// ---------------------------------------------------------------------------
+
+const undoInclude = {
+  assignment: { select: { id: true, date: true, grade: true, teacherId: true, originalTeacherId: true } },
+  revertedBy: { select: { id: true } },
+} satisfies Prisma.AssignmentHistoryInclude;
+
+type UndoRow = Prisma.AssignmentHistoryGetPayload<{ include: typeof undoInclude }>;
+
+/** 이력 행이 속한 교체 묶음 (넘기기 1행, 맞교환은 같은 swapGroupId의 2행). */
+async function undoGroups(db: Db, seeds: { id: number; swapGroupId: string | null }[]): Promise<Map<number, UndoRow[]>> {
+  const groupIds = [...new Set(seeds.map((s) => s.swapGroupId).filter((g): g is string => g !== null))];
+  const rows = await db.assignmentHistory.findMany({
+    where: { OR: [{ id: { in: seeds.map((s) => s.id) } }, { swapGroupId: { in: groupIds } }] },
+    include: undoInclude,
+  });
+  return new Map(
+    seeds.map((s) => [s.id, rows.filter((r) => (s.swapGroupId ? r.swapGroupId === s.swapGroupId : r.id === s.id))]),
+  );
+}
+
+/** 배정별 가장 최근 이력 id (id는 자동 증가라 가장 큰 값이 최신). */
+async function latestHistoryIds(db: Db, assignmentIds: number[]): Promise<Map<number, number>> {
+  const rows = await db.assignmentHistory.groupBy({
+    by: ['assignmentId'],
+    where: { assignmentId: { in: assignmentIds } },
+    _max: { id: true },
+  });
+  return new Map(rows.map((r) => [r.assignmentId, r._max.id ?? 0]));
+}
+
+/**
+ * 되돌릴 수 없는 사유. 교사가 직접 한 넘기기·맞교환만, 되돌린 적이 없고, 그 뒤로 해당 셀에 다른 변경이 없어야 한다.
+ * 맞교환은 두 셀 모두 조건을 만족해야 한다 (한쪽만 되돌리지 않는다).
+ */
+function undoBlocker(group: UndoRow[], latest: Map<number, number>): string | null {
+  if (group.length === 0) return '교체 이력을 찾을 수 없습니다.';
+  if (group.some((r) => r.changedByRole !== 'TEACHER' || r.fromTeacherId === null || r.revertOfId !== null)) {
+    return '넘기기·맞교환 이력만 되돌릴 수 있습니다.';
+  }
+  if (group.some((r) => r.revertedBy !== null)) return '이미 되돌린 교체입니다.';
+  if (group.some((r) => latest.get(r.assignmentId) !== r.id || r.assignment.teacherId !== r.toTeacherId)) {
+    return '교체 이후 다른 변경이 있어 되돌릴 수 없습니다.';
+  }
+  return null;
+}
+
+/** 교체한 교사 본인, 또는 관련 셀 전체의 학년 권한자(학년부장·ADMIN). */
+const mayUndo = (user: AuthenticatedUser, group: UndoRow[]) =>
+  group.length > 0 &&
+  (group.every((r) => r.changedById === user.id) || group.every((r) => user.gradeHeadOf.includes(r.assignment.grade)));
+
+/** 화면의 되돌리기 버튼용: 주어진 이력 중 지금 되돌릴 수 있는 행 id (월 상태 검사 포함). */
+async function undoableIds(db: Db, seeds: { id: number; swapGroupId: string | null }[], user: AuthenticatedUser) {
+  const groups = await undoGroups(db, seeds);
+  const latest = await latestHistoryIds(db, [...new Set([...groups.values()].flat().map((r) => r.assignmentId))]);
+  const result = new Set<number>();
+  for (const [id, group] of groups) {
+    if (undoBlocker(group, latest) || !mayUndo(user, group)) continue;
+    const statuses = await Promise.all(group.map((r) => getPlanStatusForDate(r.assignment.date, r.assignment.grade as Grade)));
+    if (statuses.every((st) => st === 'CONFIRMED')) result.add(id);
+  }
+  return result;
+}
+
+/**
+ * POST /api/assignments/history/:historyId/undo — 넘기기·맞교환을 교체 전 교사로 되돌린다.
+ * 확정 월만 가능하다. 원래 교사가 원래 맡던 칸이라 경고는 다시 묻지 않고, 차단 규칙(같은 날 다른 학년 감독, 비활성)만 본다.
+ * 이력은 지우지 않고 되돌린 행(revertOfId)을 남긴다.
+ */
+export async function undoChange(historyId: number, user: AuthenticatedUser) {
+  const seed = await prisma.assignmentHistory.findUnique({ where: { id: historyId } });
+  if (!seed) throw new ServiceError(404, '교체 이력을 찾을 수 없습니다.');
+  const group = (await undoGroups(prisma, [seed])).get(seed.id)!;
+  if (!mayUndo(user, group)) {
+    throw new ServiceError(403, '교체한 본인 또는 해당 학년 학년부장·관리자만 되돌릴 수 있습니다.');
+  }
+  const blocker = undoBlocker(group, await latestHistoryIds(prisma, group.map((r) => r.assignmentId)));
+  if (blocker) throw new ServiceError(409, blocker);
+  for (const r of group) await assertSwappable(r.assignment);
+
+  const ids = group.map((r) => r.assignmentId);
+  for (const r of group) {
+    const e = await evaluateOne(prisma, r.assignment, ids, r.fromTeacherId!);
+    if (e.blocking) throw new ServiceError(409, `${e.name} 선생님: ${cellLabel(r.assignment)} ${e.blocking}`);
+  }
+
+  const teacherIds = [...new Set(group.flatMap((r) => [r.fromTeacherId!, r.toTeacherId]))];
+  const [names, heads] = await Promise.all([
+    prisma.teacher.findMany({ where: { id: { in: teacherIds } }, select: { id: true, name: true } }),
+    gradeHeadIds(prisma, group.map((r) => r.assignment.grade)),
+  ]);
+  const nameOf = (id: number) => names.find((t) => t.id === id)?.name ?? '';
+  const swapGroupId = group.length > 1 ? randomUUID() : null;
+  const now = new Date();
+  const role: Role = group.every((r) => r.changedById === user.id) ? 'TEACHER' : managementRole(user);
+
+  return prisma.$transaction(async (tx) => {
+    // 검증 이후 다른 요청으로 바뀌었다면 전체 취소
+    const recheck = (await undoGroups(tx, [seed])).get(seed.id)!;
+    if (undoBlocker(recheck, await latestHistoryIds(tx, ids))) {
+      throw new ServiceError(409, '그 사이 감독 배정이 변경되었습니다. 다시 확인해주세요.');
+    }
+    const updated = [];
+    for (const r of group) {
+      const to = r.fromTeacherId!;
+      updated.push(
+        await tx.assignment.update({
+          where: { id: r.assignmentId },
+          data: { teacherId: to, isModified: to !== r.assignment.originalTeacherId, modifiedAt: now },
+        }),
+      );
+      await tx.assignmentHistory.create({
+        data: {
+          assignmentId: r.assignmentId,
+          swapGroupId,
+          fromTeacherId: r.toTeacherId,
+          toTeacherId: to,
+          changedById: user.id,
+          changedByRole: role,
+          note: '교체 취소',
+          revertOfId: r.id,
+        },
+      });
+    }
+    const summary = group
+      .map((r) => `${cellLabel(r.assignment)} ${nameOf(r.toTeacherId)} → ${nameOf(r.fromTeacherId!)}`)
+      .join(', ');
+    await notify(
+      tx,
+      [
+        ...teacherIds.map((teacherId) => ({
+          teacherId,
+          type: (swapGroupId ? 'SWAPPED' : 'ASSIGNED_BY_CHANGE') as NotificationType,
+          assignmentId: group.find((r) => r.fromTeacherId === teacherId)?.assignmentId,
+          message: `${user.name} 선생님이 감독 교체를 취소했습니다: ${summary}`,
+        })),
+        ...heads
+          .filter((id) => !teacherIds.includes(id))
+          .map((teacherId) => ({ teacherId, type: 'ASSIGNED_BY_CHANGE' as const, message: `[교체 취소] ${summary}` })),
+      ].filter((n) => n.teacherId !== user.id),
+    );
+    return { assignments: updated };
   });
 }

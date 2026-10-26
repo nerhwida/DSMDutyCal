@@ -25,28 +25,28 @@ model Teacher {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  gradeHead           GradeHead?
-  teacherGrades       TeacherGrade[]
-  weekdayExclusions   TeacherWeekdayExclusion[]
-  unavailableDates    TeacherUnavailableDate[]
-  statsExclusions     TeacherStatsExclusion[]
-  afterSchoolRecords  AfterSchoolRecord[]
-  makeupNotes         MakeupNote[]
-  initialCounts       InitialCount[]
-  notifications       Notification[]
-  auditLogs           AuditLog[]
+  gradeHead          GradeHead?
+  teacherGrades      TeacherGrade[]
+  weekdayExclusions  TeacherWeekdayExclusion[]
+  unavailableDates   TeacherUnavailableDate[]
+  statsExclusions    TeacherStatsExclusion[]
+  afterSchoolRecords AfterSchoolRecord[]
+  makeupNotes        MakeupNote[]
+  initialCounts      InitialCount[]
+  notifications      Notification[]
+  auditLogs          AuditLog[]
 
   currentAssignments  Assignment[] @relation("CurrentTeacher")
   originalAssignments Assignment[] @relation("OriginalTeacher")
 
-  historyChangedBy    AssignmentHistory[] @relation("ChangedBy")
-  historyFrom         AssignmentHistory[] @relation("FromTeacher")
-  historyTo           AssignmentHistory[] @relation("ToTeacher")
+  historyChangedBy AssignmentHistory[] @relation("ChangedBy")
+  historyFrom      AssignmentHistory[] @relation("FromTeacher")
+  historyTo        AssignmentHistory[] @relation("ToTeacher")
 
   confirmedMonthPlans MonthPlan[] @relation("ConfirmedBy")
   closedMonthPlans    MonthPlan[] @relation("ClosedBy")
 
-  apiClientsCreated   ApiClient[] @relation("ApiClientCreatedBy")
+  apiClientsCreated ApiClient[] @relation("ApiClientCreatedBy")
 }
 
 /// 학년부장 (학년당 1명, ADMIN만 지정)
@@ -188,11 +188,15 @@ model AssignmentHistory {
   changedById   Int
   changedByRole String
   note          String?
+  /// 이 행이 되돌린 넘기기·맞교환 이력. 되돌린 이력은 다시 되돌릴 수 없다.
+  revertOfId    Int?     @unique
 
-  assignment  Assignment @relation(fields: [assignmentId], references: [id])
-  fromTeacher Teacher?   @relation("FromTeacher", fields: [fromTeacherId], references: [id])
-  toTeacher   Teacher    @relation("ToTeacher", fields: [toTeacherId], references: [id])
-  changedBy   Teacher    @relation("ChangedBy", fields: [changedById], references: [id])
+  assignment  Assignment         @relation(fields: [assignmentId], references: [id])
+  revertOf    AssignmentHistory? @relation("Revert", fields: [revertOfId], references: [id], onDelete: SetNull)
+  revertedBy  AssignmentHistory? @relation("Revert")
+  fromTeacher Teacher?           @relation("FromTeacher", fields: [fromTeacherId], references: [id])
+  toTeacher   Teacher            @relation("ToTeacher", fields: [toTeacherId], references: [id])
+  changedBy   Teacher            @relation("ChangedBy", fields: [changedById], references: [id])
 }
 
 /// 초기 누계. rotationGroup: 'WEEKDAY' | 'FRIDAY'

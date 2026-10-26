@@ -413,3 +413,80 @@ describe('내 감독 화면 (F1-3)', () => {
     expect(bHistory.body[0]).toMatchObject({ kind: 'RECEIVED', fromTeacherName: a.name });
   });
 });
+
+describe('교체 취소 (넘기기·맞교환 되돌리기)', () => {
+  const lastHistory = (assignmentId: number) =>
+    prisma.assignmentHistory.findFirstOrThrow({ where: { assignmentId }, orderBy: { id: 'desc' } });
+
+  it('넘긴 교사가 되돌리면 원래 교사로 돌아가고, 이력은 남으며 다시 되돌릴 수 없다', async () => {
+    const a = await newTeacher('취소A', [1]);
+    const b = await newTeacher('취소B', [1]);
+    const x = await cell('2031-11-03', 1, a.id);
+    await a.agent.post(`/api/assignments/${x.id}/transfer`).send({ toTeacherId: b.id });
+    const given = await lastHistory(x.id);
+
+    const mine = await a.agent.get('/api/me/history');
+    expect(mine.body[0]).toMatchObject({ id: given.id, kind: 'GAVE', canUndo: true, undone: false });
+    // 넘겨받은 교사는 되돌릴 수 없다
+    expect((await b.agent.get('/api/me/history')).body[0].canUndo).toBe(false);
+    expect((await b.agent.post(`/api/assignments/history/${given.id}/undo`)).status).toBe(403);
+
+    const res = await a.agent.post(`/api/assignments/history/${given.id}/undo`);
+    expect(res.status).toBe(200);
+    const after = await reload(x.id);
+    expect(after.teacherId).toBe(a.id);
+    expect(after.isModified).toBe(false);
+
+    const undo = await lastHistory(x.id);
+    expect(undo).toMatchObject({ revertOfId: given.id, fromTeacherId: b.id, toTeacherId: a.id, note: '교체 취소' });
+    expect(await prisma.notification.count({ where: { teacherId: b.id, message: { contains: '교체를 취소' } } })).toBe(1);
+
+    const history = await a.agent.get('/api/me/history');
+    expect(history.body[0]).toMatchObject({ kind: 'UNDO', canUndo: false });
+    expect(history.body.find((h: { id: number }) => h.id === given.id)).toMatchObject({ undone: true, canUndo: false });
+    expect((await a.agent.post(`/api/assignments/history/${given.id}/undo`)).status).toBe(409);
+    expect((await a.agent.post(`/api/assignments/history/${undo.id}/undo`)).status).toBe(409);
+  });
+
+  it('맞교환은 두 셀을 함께 되돌리고, 해당 학년부장도 되돌릴 수 있다', async () => {
+    const a = await newTeacher('취소맞A', [1]);
+    const b = await newTeacher('취소맞B', [1]);
+    const x = await cell('2031-11-04', 1, a.id);
+    const y = await cell('2031-11-05', 1, b.id);
+    await a.agent.post('/api/assignments/swap').send({ myAssignmentId: x.id, targetAssignmentId: y.id });
+    const swapped = await lastHistory(y.id);
+
+    const head1 = await loginFixture('1학년부장', '1111');
+    const res = await head1.post(`/api/assignments/history/${swapped.id}/undo`);
+    expect(res.status).toBe(200);
+    expect((await reload(x.id)).teacherId).toBe(a.id);
+    expect((await reload(y.id)).teacherId).toBe(b.id);
+    const undos = await prisma.assignmentHistory.findMany({ where: { assignmentId: { in: [x.id, y.id] }, revertOfId: { not: null } } });
+    expect(undos).toHaveLength(2);
+    expect(undos[0].swapGroupId).toBeTruthy();
+    expect(undos[0].swapGroupId).toBe(undos[1].swapGroupId);
+    expect(undos[0].changedByRole).toBe('GRADE_HEAD');
+  });
+
+  it('교체 이후 다른 변경이 있거나, 원래 교사가 그날 다른 학년 감독 중이면 되돌릴 수 없다', async () => {
+    const a = await newTeacher('취소불가A', [1, 2]);
+    const b = await newTeacher('취소불가B', [1]);
+    const c = await newTeacher('취소불가C', [1]);
+    const x = await cell('2031-11-06', 1, a.id);
+    await a.agent.post(`/api/assignments/${x.id}/transfer`).send({ toTeacherId: b.id });
+    const given = await lastHistory(x.id);
+    await b.agent.post(`/api/assignments/${x.id}/transfer`).send({ toTeacherId: c.id });
+    const later = await a.agent.post(`/api/assignments/history/${given.id}/undo`);
+    expect(later.status).toBe(409);
+    expect(later.body.error).toContain('다른 변경');
+    expect((await reload(x.id)).teacherId).toBe(c.id);
+
+    const z = await cell('2031-11-07', 1, a.id);
+    await a.agent.post(`/api/assignments/${z.id}/transfer`).send({ toTeacherId: b.id });
+    const given2 = await lastHistory(z.id);
+    await cell('2031-11-07', 2, a.id); // 넘긴 뒤 같은 날 2학년 감독을 맡음
+    const blocked = await a.agent.post(`/api/assignments/history/${given2.id}/undo`);
+    expect(blocked.status).toBe(409);
+    expect((await reload(z.id)).teacherId).toBe(b.id);
+  });
+});

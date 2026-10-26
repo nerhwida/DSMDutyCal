@@ -24,7 +24,7 @@ meRouter.get(
 meRouter.get(
   '/history',
   handle(async (req, res) => {
-    res.json(await listMyHistory(req.user!.id));
+    res.json(await listMyHistory(req.user!.id, req.user!));
   }),
 );
 

@@ -13,6 +13,7 @@ const KIND_LABEL: Record<HistoryEntry['kind'], string> = {
   RECEIVED: '넘겨받은 감독',
   SWAP: '맞교환',
   ASSIGNED: '지정 배정',
+  UNDO: '교체 취소',
 };
 
 /** F1-3 내 감독 화면 (일반 교사 기본 진입 화면). */
@@ -27,6 +28,7 @@ export function MyDutyPage() {
   const [stats, setStats] = useState<MonthStats | null>(null);
   const [swapTarget, setSwapTarget] = useState<{ a: TeacherAssignment; anchor: DOMRect } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [undoingId, setUndoingId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -49,6 +51,21 @@ export function MyDutyPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  async function undo(h: HistoryEntry) {
+    const what = h.kind === 'SWAP' ? '맞교환을 취소하고 두 감독을' : `${dateLabel(h.date)} ${h.grade}학년 감독을`;
+    if (!window.confirm(`${what} 교체 전 교사로 되돌릴까요? 상대 교사에게 알림이 갑니다.`)) return;
+    setUndoingId(h.id);
+    setError(null);
+    try {
+      await api.post(`/api/assignments/history/${h.id}/undo`, {});
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '교체를 되돌리지 못했습니다.');
+    } finally {
+      setUndoingId(null);
+    }
+  }
 
   if (!user) return null;
   const myRow = stats?.rows.find((r) => r.teacherId === user.id);
@@ -141,8 +158,22 @@ export function MyDutyPage() {
         <ul className="max-h-80 overflow-y-auto rounded border border-slate-200 bg-white text-sm">
           {history.map((h) => (
             <li key={h.id} className="border-b border-slate-100 px-3 py-2 last:border-b-0">
-              <span className="mr-2 rounded bg-slate-100 px-1.5 text-xs text-slate-600">{KIND_LABEL[h.kind]}</span>
-              {dateLabel(h.date)} {h.grade}학년: {h.fromTeacherName ?? '미배정'} → {h.toTeacherName}
+              <div className="flex items-start justify-between gap-2">
+                <span className={h.undone ? 'text-slate-400 line-through' : ''}>
+                  <span className="mr-2 rounded bg-slate-100 px-1.5 text-xs text-slate-600 no-underline">{KIND_LABEL[h.kind]}</span>
+                  {dateLabel(h.date)} {h.grade}학년: {h.fromTeacherName ?? '미배정'} → {h.toTeacherName}
+                </span>
+                {h.undone && <span className="shrink-0 text-xs text-slate-400">되돌림</span>}
+                {h.canUndo && (
+                  <button
+                    onClick={() => undo(h)}
+                    disabled={undoingId !== null}
+                    className="shrink-0 rounded border border-slate-300 px-2 py-0.5 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-40"
+                  >
+                    {undoingId === h.id ? '되돌리는 중…' : '되돌리기'}
+                  </button>
+                )}
+              </div>
               <p className="text-xs text-slate-400">
                 {formatDateTime(h.changedAt)} · {h.changedByName}
                 {h.note && ` · ${h.note}`}

@@ -204,7 +204,7 @@ export interface AppNotification {
 
 export interface HistoryEntry {
   id: number;
-  kind: 'GAVE' | 'RECEIVED' | 'SWAP' | 'ASSIGNED';
+  kind: 'GAVE' | 'RECEIVED' | 'SWAP' | 'ASSIGNED' | 'UNDO';
   date: string;
   grade: Grade;
   /** null = 미배정 칸을 채운 경우 */
@@ -213,6 +213,10 @@ export interface HistoryEntry {
   changedByName: string;
   changedAt: string;
   note: string | null;
+  /** 이미 되돌린 넘기기·맞교환 */
+  undone: boolean;
+  /** 지금 되돌릴 수 있는지 (교체한 본인·학년 권한자, 확정 월, 이후 변경 없음) */
+  canUndo: boolean;
 }
 
 export interface StatsRow {

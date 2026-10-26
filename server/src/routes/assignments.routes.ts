@@ -12,6 +12,7 @@ import {
   swapAssignments,
   transferAssignment,
   transferPreview,
+  undoChange,
 } from '../services/assignmentService.js';
 
 export const assignmentsRouter = Router();
@@ -35,6 +36,16 @@ assignmentsRouter.post(
     const parsed = swapSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: '입력값이 올바르지 않습니다.' });
     res.json(await swapAssignments(parsed.data, req.user!));
+  }),
+);
+
+/** POST /api/assignments/history/:historyId/undo — 넘기기·맞교환 되돌리기 (교체한 본인, 해당 학년부장, ADMIN). 권한은 서비스에서 검사. */
+assignmentsRouter.post(
+  '/history/:historyId/undo',
+  handle(async (req, res) => {
+    const historyId = Number(req.params.historyId);
+    if (!Number.isInteger(historyId)) return res.status(400).json({ error: '이력 정보가 올바르지 않습니다.' });
+    res.json(await undoChange(historyId, req.user!));
   }),
 );
 
