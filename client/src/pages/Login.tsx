@@ -6,7 +6,7 @@ import { SCHOOL_EMAIL_DOMAIN } from '../components/EmailRegisterDialog';
 type Mode = 'email' | 'pin';
 
 export function LoginPage() {
-  const [mode, setMode] = useState<Mode>('email');
+  const [mode, setMode] = useState<Mode>('pin');
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
@@ -17,8 +17,8 @@ export function LoginPage() {
         <div className="mb-5 flex border-b border-slate-200 text-sm">
           {(
             [
-              ['email', '이메일 인증'],
               ['pin', 'ID · PIN'],
+              ['email', '이메일 인증'],
             ] as const
           ).map(([key, label]) => (
             <button
@@ -34,6 +34,7 @@ export function LoginPage() {
           ))}
         </div>
 
+        {/* 전환 기간이라 아직 이메일을 등록하지 않은 교사가 많아 ID·PIN이 기본이다. */}
         {mode === 'email' ? <EmailLoginForm /> : <PinLoginForm />}
       </div>
     </div>
