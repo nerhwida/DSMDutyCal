@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { api } from '../api/client';
-import { setEmailLoginPreference } from '../lib/loginPreference';
 
 export const SCHOOL_EMAIL_DOMAIN = 'dsm.hs.kr';
 
@@ -41,7 +40,6 @@ export function EmailRegisterDialog({ onDone, onClose }: EmailRegisterDialogProp
     setError(null);
     try {
       await api.post('/api/me/email/verify', { code });
-      setEmailLoginPreference(true); // 다음부터 이 브라우저의 로그인 화면은 이메일 인증만 보인다
       onDone();
     } catch (err) {
       setError(err instanceof Error ? err.message : '인증에 실패했습니다.');

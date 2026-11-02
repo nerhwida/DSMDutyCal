@@ -2,16 +2,15 @@ import { useState } from 'react';
 import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { SCHOOL_EMAIL_DOMAIN } from '../components/EmailRegisterDialog';
-import { prefersEmailLogin, setEmailLoginPreference } from '../lib/loginPreference';
 
 type Mode = 'email' | 'pin';
 
 /**
- * 처음에는 ID·PIN만 보인다. 이 브라우저에서 이메일을 등록(동의)했거나 이메일로 로그인한 적이 있으면 이메일 인증만 보인다.
- * 이메일 화면에는 공용 PC 등을 위해 ID·PIN으로 바꾸는 작은 링크를 둔다 (ID·PIN 화면에는 이메일 전환이 없다).
+ * 이메일 인증 로그인이 기본 화면이다. 이메일을 아직 등록하지 않은 교사는 'ID·PIN으로 로그인'으로 들어가
+ * 개인정보 수집에 동의하고 이메일을 등록한 뒤, 다음부터 이메일로 로그인한다.
  */
 export function LoginPage() {
-  const [mode, setMode] = useState<Mode>(() => (prefersEmailLogin() ? 'email' : 'pin'));
+  const [mode, setMode] = useState<Mode>('email');
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
@@ -21,13 +20,20 @@ export function LoginPage() {
 
         {mode === 'email' ? <EmailLoginForm /> : <PinLoginForm />}
 
-        {mode === 'email' && (
-          <div className="mt-5 border-t border-slate-100 pt-3 text-center text-xs text-slate-400">
-            <button type="button" className="underline hover:text-slate-600" onClick={() => setMode('pin')}>
-              다른 계정 · ID·PIN으로 로그인
+        <div className="mt-5 border-t border-slate-100 pt-3 text-center text-sm">
+          {mode === 'email' ? (
+            <>
+              <p className="mb-1 text-xs text-slate-500">이메일을 아직 등록하지 않았나요?</p>
+              <button type="button" className="text-slate-700 underline hover:text-slate-900" onClick={() => setMode('pin')}>
+                ID·PIN으로 로그인 (로그인 후 이메일 등록)
+              </button>
+            </>
+          ) : (
+            <button type="button" className="text-slate-700 underline hover:text-slate-900" onClick={() => setMode('email')}>
+              이메일 인증으로 로그인
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
@@ -68,7 +74,6 @@ function EmailLoginForm() {
     setError(null);
     try {
       await api.post('/api/auth/email/verify', { email: sentTo, code });
-      setEmailLoginPreference(true);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : '로그인에 실패했습니다.');
@@ -99,9 +104,6 @@ function EmailLoginForm() {
         >
           {busy ? '보내는 중...' : '인증 코드 받기'}
         </button>
-        <p className="mt-3 text-xs text-slate-500">
-          이메일을 아직 등록하지 않았다면 ID·PIN으로 로그인한 뒤 개인정보 수집에 동의하고 등록해주세요.
-        </p>
       </form>
     );
   }
