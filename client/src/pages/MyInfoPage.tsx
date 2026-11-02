@@ -3,6 +3,7 @@ import { api } from '../api/client';
 import { roleLabel, useAuth } from '../auth/AuthContext';
 import { EmailRegisterDialog } from '../components/EmailRegisterDialog';
 import { formatDateTime } from '../lib/date';
+import { setEmailLoginPreference } from '../lib/loginPreference';
 import type { Teacher } from '../types';
 import { WEEKDAY_LABEL } from '../types';
 
@@ -65,6 +66,7 @@ export function MyInfoPage() {
     if (!window.confirm('개인정보 수집·이용 동의를 철회하고 등록한 이메일을 삭제할까요? 이후에는 ID·PIN으로만 로그인할 수 있습니다.')) return;
     try {
       await api.delete('/api/me/email');
+      setEmailLoginPreference(false);
       await refresh();
       await load();
     } catch (err) {

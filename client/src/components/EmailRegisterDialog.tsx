@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api/client';
+import { setEmailLoginPreference } from '../lib/loginPreference';
 
 export const SCHOOL_EMAIL_DOMAIN = 'dsm.hs.kr';
 
@@ -40,6 +41,7 @@ export function EmailRegisterDialog({ onDone, onClose }: EmailRegisterDialogProp
     setError(null);
     try {
       await api.post('/api/me/email/verify', { code });
+      setEmailLoginPreference(true); // 다음부터 이 브라우저의 로그인 화면은 이메일 인증만 보인다
       onDone();
     } catch (err) {
       setError(err instanceof Error ? err.message : '인증에 실패했습니다.');
@@ -54,7 +56,7 @@ export function EmailRegisterDialog({ onDone, onClose }: EmailRegisterDialogProp
         <div>
           <h2 className="text-base font-semibold text-slate-800">이메일 로그인 등록</h2>
           <p className="mt-1 text-sm text-slate-500">
-            학교 이메일(@{SCHOOL_EMAIL_DOMAIN})을 등록하면 PIN 없이 메일로 받은 인증 코드로 로그인할 수 있습니다.
+            학교 이메일(@{SCHOOL_EMAIL_DOMAIN})을 등록하면 다음부터는 PIN 대신 메일로 받은 인증 코드로 로그인합니다.
           </p>
         </div>
 
