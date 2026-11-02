@@ -192,7 +192,8 @@ $env:NODE_OPTIONS = "--use-system-ca"
   화면은 `App.tsx`가 PIN 변경 다음에 `GoogleLinkDialog required`만 보여 주고, '동의하지 않음'은 로그아웃이다. 철회하면 다시 막힌다.
   Google 장애 등 비상시 `.env`의 `EMAIL_CONSENT_REQUIRED=false`로 끈다 (`/api/auth/me`의 `emailConsentRequired`).
   테스트는 vitest `test.env`에서 꺼 두고 `googleAuth.routes.test.ts`가 켜서 확인한다. 동의 전 화면에서 새 API를 부르면 예외 목록에 넣어야 한다.
-- `GET /api/teachers`는 다른 교사의 `email`/`emailConsentAt`을 빼고 `hasEmail`만 준다 (관리자·본인은 전부). 교사 관리 화면에 ✉ 표시.
+- `GET /api/teachers`는 다른 교사의 `email`/`emailConsentAt`을 빼고 `hasEmail`만 준다 (관리자·본인은 전부). 교사 관리 화면에 ✉ 표시,
+  관리자에게는 'Google 계정 연결 현황'(`GoogleAccountsPanel`: 교사별 계정·동의 일시, 미연결만 보기)도 보인다.
 - 관리자 PIN 재확인(마감 해제·복원 등)은 여전히 PIN을 쓴다.
 
 ### 순번 모델 (중요하고 드러나지 않는 설계 결정)

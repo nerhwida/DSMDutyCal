@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext';
 import type { Grade, GradeHeadRef, RotationStatus, Teacher } from '../types';
 import { WEEKDAY_LABEL } from '../types';
 import { OrderList } from '../components/OrderList';
+import { formatDateTime } from '../lib/date';
 
 const GRADES: Grade[] = [1, 2, 3];
 const WEEKDAYS = [1, 2, 3, 4, 5];
@@ -201,7 +202,7 @@ export function TeacherManagementPage() {
                   <td className="px-3 py-2 font-medium text-slate-800">
                     {t.name}
                     {t.hasEmail && (
-                      <span className="ml-1 text-xs font-normal text-sky-600" title={t.email ?? '이메일 로그인 등록'}>
+                      <span className="ml-1 text-xs font-normal text-sky-600" title={t.email ?? 'Google 계정 연결'}>
                         ✉
                       </span>
                     )}
@@ -336,6 +337,8 @@ export function TeacherManagementPage() {
           </form>
         )}
       </div>
+
+      {user.isAdmin && <GoogleAccountsPanel teachers={teachers} />}
 
       {user.isAdmin && <ResetAllPinsPanel onDone={(msg) => { setNotice(msg); load(); }} onError={setError} />}
 
@@ -586,6 +589,61 @@ function StatsExclusionPanel({
 }
 
 /** 관리자를 뺀 교사 전원의 PIN 일괄 초기화 (서비스 안내용). 관리자 본인 PIN으로 다시 확인한다. */
+/** 관리자 전용: 교사별 Google 계정 연결(개인정보 수집·이용 동의) 현황. 이메일은 관리자·본인에게만 내려온다. */
+function GoogleAccountsPanel({ teachers }: { teachers: Teacher[] }) {
+  const [onlyUnlinked, setOnlyUnlinked] = useState(false);
+  const active = teachers.filter((t) => t.active);
+  const linked = active.filter((t) => t.hasEmail).length;
+  const rows = [...teachers]
+    .filter((t) => !onlyUnlinked || !t.hasEmail)
+    .sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name, 'ko'));
+
+  return (
+    <div>
+      <div className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h3 className="text-sm font-semibold text-slate-800">Google 계정 연결 현황</h3>
+        <span className="text-xs text-slate-500">
+          활성 교사 {active.length}명 중 <b className="text-slate-700">{linked}명</b> 연결 · 미연결 {active.length - linked}명
+        </span>
+        <label className="flex items-center gap-1 text-xs text-slate-600">
+          <input type="checkbox" checked={onlyUnlinked} onChange={(e) => setOnlyUnlinked(e.target.checked)} />
+          미연결만 보기
+        </label>
+      </div>
+      <div className="max-h-80 overflow-y-auto rounded border border-slate-200 bg-white">
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 bg-slate-50 text-slate-600">
+            <tr>
+              <th className="px-3 py-1.5 text-left">교사</th>
+              <th className="px-3 py-1.5 text-left">Google 계정</th>
+              <th className="px-3 py-1.5 text-left">동의 일시</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((t) => (
+              <tr key={t.id} className={`border-t border-slate-100 ${!t.active ? 'opacity-50' : ''}`}>
+                <td className="px-3 py-1.5 text-slate-800">
+                  {t.name}
+                  {!t.active && <span className="ml-1 text-xs text-slate-400">(비활성)</span>}
+                </td>
+                <td className="px-3 py-1.5">{t.email ?? <span className="text-slate-400">미연결</span>}</td>
+                <td className="px-3 py-1.5 text-slate-600">{t.emailConsentAt ? formatDateTime(t.emailConsentAt) : '—'}</td>
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={3} className="px-3 py-3 text-center text-xs text-slate-400">
+                  미연결 교사가 없습니다.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function ResetAllPinsPanel({ onDone, onError }: { onDone: (message: string) => void; onError: (message: string) => void }) {
   const [newPin, setNewPin] = useState('0000');
   const [adminPin, setAdminPin] = useState('');
