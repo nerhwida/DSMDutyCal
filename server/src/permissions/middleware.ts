@@ -21,7 +21,8 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     return res.status(401).json({ error: '세션이 유효하지 않습니다. 다시 로그인해주세요.' });
   }
 
-  req.user = user;
+  // 이메일로 로그인한 교사는 PIN을 몰라도 되므로 PIN 변경 화면을 강제하지 않는다.
+  req.user = req.session.loginMethod === 'EMAIL' ? { ...user, mustChangePin: false } : user;
   next();
 }
 

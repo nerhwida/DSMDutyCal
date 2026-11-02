@@ -48,6 +48,8 @@ export const AUDIT_ACTIONS = [
   'BACKUP',
   'RESTORE_STAGED',
   'RESTORE_CANCELLED',
+  'REGISTER_EMAIL',
+  'WITHDRAW_EMAIL',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

@@ -198,7 +198,14 @@ export function TeacherManagementPage() {
             <tbody>
               {teachers.map((t) => (
                 <tr key={t.id} className={`border-t border-slate-100 ${!t.active ? 'opacity-50' : ''}`}>
-                  <td className="px-3 py-2 font-medium text-slate-800">{t.name}</td>
+                  <td className="px-3 py-2 font-medium text-slate-800">
+                    {t.name}
+                    {t.hasEmail && (
+                      <span className="ml-1 text-xs font-normal text-sky-600" title={t.email ?? '이메일 로그인 등록'}>
+                        ✉
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-2">
                     <input
                       type="checkbox"

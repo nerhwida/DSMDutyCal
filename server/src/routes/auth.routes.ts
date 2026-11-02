@@ -4,6 +4,9 @@ import { prisma } from '../lib/prisma.js';
 import { login } from '../auth/authService.js';
 import { hashPin, isValidPinFormat, verifyPin } from '../auth/pin.js';
 import { requireAuth } from '../permissions/middleware.js';
+import { handle } from '../lib/http.js';
+import { assertMailAvailable } from '../lib/mailer.js';
+import { CODE_FAILURE_MESSAGE, checkEmailCode, issueEmailCode, normalizeSchoolEmail } from '../auth/emailAuth.js';
 
 export const authRouter = Router();
 
@@ -38,9 +41,56 @@ authRouter.post('/login', async (req, res) => {
       return res.status(500).json({ error: '로그인 처리 중 오류가 발생했습니다.' });
     }
     req.session.teacherId = result.teacherId;
+    req.session.loginMethod = 'PIN';
     res.json({ ok: true, mustChangePin: result.mustChangePin });
   });
 });
+
+const emailSchema = z.object({ email: z.string().max(200) });
+const NOT_SCHOOL_EMAIL = '@dsm.hs.kr 학교 이메일만 사용할 수 있습니다.';
+
+/**
+ * POST /api/auth/email/request — 이메일 로그인 인증 코드 요청.
+ * 등록 여부가 드러나지 않도록 등록되지 않은 주소·재요청 대기 중에도 같은 응답을 준다.
+ */
+authRouter.post(
+  '/email/request',
+  handle(async (req, res) => {
+    const parsed = emailSchema.safeParse(req.body);
+    const email = parsed.success ? normalizeSchoolEmail(parsed.data.email) : null;
+    if (!email) return res.status(400).json({ error: NOT_SCHOOL_EMAIL });
+    assertMailAvailable();
+
+    const teacher = await prisma.teacher.findUnique({ where: { email } });
+    if (teacher?.active) await issueEmailCode(teacher.id, 'LOGIN', email);
+    res.json({ ok: true });
+  }),
+);
+
+const emailVerifySchema = z.object({ email: z.string().max(200), code: z.string().trim().regex(/^\d{6}$/) });
+
+/** POST /api/auth/email/verify — 인증 코드 확인 후 로그인. */
+authRouter.post(
+  '/email/verify',
+  handle(async (req, res) => {
+    const parsed = emailVerifySchema.safeParse(req.body);
+    const email = parsed.success ? normalizeSchoolEmail(parsed.data.email) : null;
+    if (!parsed.success || !email) return res.status(400).json({ error: CODE_FAILURE_MESSAGE.INVALID });
+
+    const teacher = await prisma.teacher.findUnique({ where: { email } });
+    if (!teacher?.active) return res.status(401).json({ error: CODE_FAILURE_MESSAGE.INVALID });
+    const check = await checkEmailCode(teacher.id, 'LOGIN', parsed.data.code, email);
+    if (!check.ok) {
+      return res.status(check.reason === 'TOO_MANY' ? 429 : 401).json({ error: CODE_FAILURE_MESSAGE[check.reason] });
+    }
+
+    await prisma.teacher.update({ where: { id: teacher.id }, data: { failedLoginCount: 0, lockedUntil: null } });
+    await new Promise<void>((resolve, reject) => req.session.regenerate((err) => (err ? reject(err) : resolve())));
+    req.session.teacherId = teacher.id;
+    req.session.loginMethod = 'EMAIL';
+    res.json({ ok: true, mustChangePin: false });
+  }),
+);
 
 /** POST /api/auth/logout */
 authRouter.post('/logout', (req, res) => {

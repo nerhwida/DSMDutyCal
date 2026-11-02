@@ -63,6 +63,11 @@ export interface Teacher {
   /** 통계 제외 월 (휴직·파견 등) */
   statsExclusions: { id: number; year: number; month: number }[];
   gradeHead: GradeHeadRef | null;
+  /** 이메일 로그인 등록 여부 */
+  hasEmail: boolean;
+  /** 관리자·본인에게만 내려온다 */
+  email?: string | null;
+  emailConsentAt?: string | null;
 }
 
 /** 특별 일정 1행 = (날짜, 학년). 전 학년 일정은 학년별 3행. */

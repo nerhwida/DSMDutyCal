@@ -7,6 +7,8 @@ export interface AuthUser {
   isAdmin: boolean;
   active: boolean;
   mustChangePin: boolean;
+  /** 등록한 학교 이메일. null이면 개인정보 수집 동의·이메일 등록 전. */
+  email: string | null;
   gradeHeadOf: number[];
 }
 

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { roleLabel, useAuth } from '../auth/AuthContext';
 import { NotificationBell } from '../components/NotificationBell';
+import { EmailRegisterDialog } from '../components/EmailRegisterDialog';
 import { CalendarPage } from './CalendarPage';
 import { MyDutyPage } from './MyDutyPage';
 import { StatsPage } from './StatsPage';
@@ -24,8 +25,20 @@ type Tab =
   | 'api-clients'
   | 'settings';
 
+const EMAIL_LATER_KEY = 'dutycal.emailRegisterLater';
+
+/** '나중에 하기'를 누른 로그인 세션(브라우저 탭)에서는 이메일 등록 창을 다시 띄우지 않는다. */
+function emailLaterDismissed(): boolean {
+  try {
+    return sessionStorage.getItem(EMAIL_LATER_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 export function HomePage() {
-  const { user, logout } = useAuth();
+  const { user, logout, refresh } = useAuth();
+  const [emailLater, setEmailLater] = useState(emailLaterDismissed);
   const canManageTeachers = !!user && (user.isAdmin || user.gradeHeadOf.length > 0);
   // F1-3: 일반 교사는 '내 감독'이 기본 진입 화면, 학년부장·ADMIN은 달력.
   const [tab, setTab] = useState<Tab>(canManageTeachers ? 'calendar' : 'my-duty');
@@ -45,8 +58,18 @@ export function HomePage() {
     { key: 'settings', label: '설정', visible: user.isAdmin },
   ];
 
+  function postponeEmail() {
+    try {
+      sessionStorage.setItem(EMAIL_LATER_KEY, '1');
+    } catch {
+      // 저장소를 못 쓰면 이번 화면에서만 닫는다
+    }
+    setEmailLater(true);
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 print:min-h-0 print:bg-white">
+      {user.email === null && !emailLater && <EmailRegisterDialog onDone={refresh} onClose={postponeEmail} />}
       <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-3 print:hidden">
         <span className="text-sm font-medium text-slate-700">
           {user.name} 선생님 ({roleLabel(user)})

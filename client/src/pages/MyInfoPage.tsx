@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { roleLabel, useAuth } from '../auth/AuthContext';
+import { EmailRegisterDialog } from '../components/EmailRegisterDialog';
+import { formatDateTime } from '../lib/date';
 import type { Teacher } from '../types';
 import { WEEKDAY_LABEL } from '../types';
 
 const WEEKDAYS = [1, 2, 3, 4, 5];
 
 export function MyInfoPage() {
-  const { user } = useAuth();
+  const { user, refresh } = useAuth();
+  const [registering, setRegistering] = useState(false);
   const [me, setMe] = useState<Teacher | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [date, setDate] = useState('');
@@ -58,6 +61,17 @@ export function MyInfoPage() {
     }
   }
 
+  async function withdrawEmail() {
+    if (!window.confirm('개인정보 수집·이용 동의를 철회하고 등록한 이메일을 삭제할까요? 이후에는 ID·PIN으로만 로그인할 수 있습니다.')) return;
+    try {
+      await api.delete('/api/me/email');
+      await refresh();
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '철회에 실패했습니다.');
+    }
+  }
+
   async function removeUnavailable(id: number) {
     if (!me) return;
     try {
@@ -76,6 +90,36 @@ export function MyInfoPage() {
         </h2>
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
+
+      <div>
+        <h3 className="mb-1 text-sm font-semibold text-slate-700">이메일 로그인</h3>
+        {user.email ? (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+            <span>{user.email}</span>
+            {me.emailConsentAt && <span className="text-xs text-slate-400">동의 {formatDateTime(me.emailConsentAt)}</span>}
+            <button onClick={withdrawEmail} className="text-xs text-red-600 underline">
+              동의 철회
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3 text-sm">
+            <span className="text-slate-500">등록 안 함 (ID·PIN으로 로그인)</span>
+            <button onClick={() => setRegistering(true)} className="rounded border border-slate-300 px-2 py-0.5 text-xs text-slate-700 hover:bg-slate-100">
+              이메일 등록
+            </button>
+          </div>
+        )}
+      </div>
+      {registering && (
+        <EmailRegisterDialog
+          onDone={async () => {
+            setRegistering(false);
+            await refresh();
+            await load();
+          }}
+          onClose={() => setRegistering(false)}
+        />
+      )}
 
       <div>
         <h3 className="mb-1 text-sm font-semibold text-slate-700">방과후 수업 요일</h3>

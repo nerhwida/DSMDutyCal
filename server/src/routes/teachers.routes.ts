@@ -26,7 +26,7 @@ export const teachersRouter = Router();
 teachersRouter.use(requireAuth);
 
 /** GET /api/teachers — 교사 관리 화면용 전체 목록 (활성/비활성 포함, 로그인만 하면 조회 가능). */
-teachersRouter.get('/', async (_req, res) => {
+teachersRouter.get('/', async (req, res) => {
   const teachers = await prisma.teacher.findMany({
     // 관리자가 맨 앞, 나머지는 이름 오름차순.
     orderBy: [{ isAdmin: 'desc' }, { name: 'asc' }, { id: 'asc' }],
@@ -39,7 +39,12 @@ teachersRouter.get('/', async (_req, res) => {
     },
   });
   res.json(
-    teachers.map(({ pinHash: _pinHash, ...t }) => t), // pinHash는 절대 클라이언트로 내려보내지 않는다.
+    // pinHash는 절대 클라이언트로 내려보내지 않는다. 이메일(개인정보)은 관리자와 본인에게만 보이고, 나머지는 등록 여부만.
+    teachers.map(({ pinHash: _pinHash, email, emailConsentAt, ...t }) =>
+      req.user!.isAdmin || t.id === req.user!.id
+        ? { ...t, email, emailConsentAt, hasEmail: email !== null }
+        : { ...t, hasEmail: email !== null },
+    ),
   );
 });
 

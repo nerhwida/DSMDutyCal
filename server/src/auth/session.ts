@@ -4,6 +4,8 @@ import { PrismaSessionStore } from './prismaSessionStore.js';
 declare module 'express-session' {
   interface SessionData {
     teacherId?: number;
+    /** 이메일 인증으로 로그인한 세션은 PIN 변경을 강제하지 않는다. */
+    loginMethod?: 'PIN' | 'EMAIL';
   }
 }
 

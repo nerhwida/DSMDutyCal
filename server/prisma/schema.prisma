@@ -22,6 +22,9 @@ model Teacher {
   sortOrder        Int       @default(0)
   failedLoginCount Int       @default(0)
   lockedUntil      DateTime?
+  /// 학교 이메일(@dsm.hs.kr). 개인정보 수집·이용에 동의하고 인증을 마친 교사만 있다. 이메일 로그인에 쓴다.
+  email            String?   @unique
+  emailConsentAt   DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -35,6 +38,7 @@ model Teacher {
   initialCounts      InitialCount[]
   notifications      Notification[]
   auditLogs          AuditLog[]
+  emailCodes         EmailCode[]
 
   currentAssignments  Assignment[] @relation("CurrentTeacher")
   originalAssignments Assignment[] @relation("OriginalTeacher")
@@ -293,4 +297,20 @@ model MakeupNote {
   updatedAt   DateTime @updatedAt
 
   createdBy Teacher? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+}
+
+/// 이메일 인증 코드. purpose: 'LOGIN' | 'REGISTER'. 교사·용도별로 가장 최근 1건만 유효하다 (원문은 저장하지 않음).
+model EmailCode {
+  id        Int      @id @default(autoincrement())
+  teacherId Int
+  purpose   String
+  email     String
+  codeHash  String
+  attempts  Int      @default(0)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@index([teacherId, purpose])
 }

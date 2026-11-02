@@ -97,6 +97,8 @@ export interface AuthenticatedUser {
   isAdmin: boolean;
   active: boolean;
   mustChangePin: boolean;
+  /** 등록·인증된 학교 이메일. null이면 아직 개인정보 수집 동의·이메일 등록 전. */
+  email: string | null;
   /** ADMIN은 가정 13에 따라 전 학년을 대행하므로 항상 [1,2,3]이 포함된다. */
   gradeHeadOf: number[];
 }
@@ -117,6 +119,7 @@ export async function loadAuthenticatedUser(teacherId: number): Promise<Authenti
     isAdmin: teacher.isAdmin,
     active: teacher.active,
     mustChangePin: teacher.mustChangePin,
+    email: teacher.email,
     gradeHeadOf,
   };
 }
