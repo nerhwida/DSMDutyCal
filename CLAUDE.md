@@ -23,7 +23,7 @@ git은 PATH에 없을 수 있으니 `C:\Program Files\Git\cmd\git.exe`로 실행
 **프로젝트 오너가 결정한 범위 변경** (REQUIREMENTS.md "개정 이력"에 반영됨. 다시 추가하지 말 것):
 - Excel 출력 없음 (F9 Excel과 `exceljs` 의존성 제외).
 - 인쇄물에 결재란 없음.
-- 외부 알림 없음 (카카오톡·이메일·웹 푸시). 앱 내 알림만 사용. (로그인 인증 코드 메일은 알림이 아니라 예외다.)
+- 외부 알림 없음 (카카오톡·이메일·웹 푸시). 앱 내 알림만 사용.
 - 부분 재편성은 알림을 보내지 않는다.
 - 특별 일정은 날짜 × 학년 단위다 (아래 "특별 일정은 학년 단위" 참고).
 
@@ -169,23 +169,29 @@ $env:NODE_OPTIONS = "--use-system-ca"
 - **의무귀가**는 일정 관리의 별도 영역(`MandatoryHomeSection`)에서 등록한다. 저장은 특별 일정 `MANDATORY_HOME` 그대로이고,
   `POST /api/special-days`에 `weekdaysOnly: true`를 보내 기간 안의 평일만 만든다. 특별 일정 목록·유형 선택에서는 빠진다.
 
-### 이메일 인증 로그인 (2026-11-02)
-- `@dsm.hs.kr` 주소만 쓴다 (`auth/emailAuth.ts`의 `normalizeSchoolEmail`, 소문자로 저장). ID·PIN 로그인은 전환 기간이라 그대로 둔다.
-- 등록: 로그인한 교사가 동의창(`EmailRegisterDialog`, 미등록이면 `Home`이 자동으로 띄우고 '나중에 하기'는 sessionStorage)에서
-  `consent: true`로 `POST /api/me/email/request` → 메일의 코드로 `POST /api/me/email/verify` → `Teacher.email`·`emailConsentAt` 저장 +
-  감사 로그 `REGISTER_EMAIL`. 철회는 `DELETE /api/me/email`(`WITHDRAW_EMAIL`).
-- 로그인: `POST /api/auth/email/request`(등록 여부와 무관하게 같은 200 응답 — 계정 노출 방지) → `POST /api/auth/email/verify`.
-  세션에 `loginMethod: 'EMAIL'`을 두고, `requireAuth`가 이 세션의 `mustChangePin`을 false로 바꾼다 (PIN을 몰라도 됨).
-- 로그인 화면은 이메일 인증(왼쪽)과 ID·PIN(오른쪽, 좁은 화면은 아래)을 함께 보여 준다 (미등록 교사는 PIN으로 들어가 동의·등록).
-  서버는 등록한 교사의 PIN 로그인도 받는다.
-- **동의는 필수다** (오너 결정): `requireAuth`가 이메일 미등록 교사(관리자 포함)에게 `GET /api/auth/me`, `PUT /api/auth/pin`,
-  `POST /api/me/email/request|verify` 말고는 403 `{ requiresEmailConsent }`를 준다 (`CONSENT_EXEMPT`, 메서드+경로로 비교).
-  화면은 `App.tsx`가 PIN 변경 다음에 `EmailRegisterDialog required`만 보여 주고, '동의하지 않음'은 로그아웃이다. 철회하면 다시 막힌다.
-  메일 장애 등 비상시 `.env`의 `EMAIL_CONSENT_REQUIRED=false`로 끈다 (`/api/auth/me`의 `emailConsentRequired`).
-  테스트는 vitest `test.env`에서 꺼 두고 `emailAuth.routes.test.ts`가 켜서 확인한다. 동의 전 화면에서 새 API를 부르면 예외 목록에 넣어야 한다.
-- 코드(`EmailCode`, 교사·용도별 최신 1건만 유효): SHA-256 해시 저장, 10분 유효, 5회 틀리면 무효, 재발송 1분 간격.
-- 메일은 `lib/mailer.ts`(nodemailer, `SMTP_*`/`MAIL_FROM`). SMTP_HOST가 없으면 개발은 콘솔 출력 + `devOutbox`(테스트가 코드를 읽음),
-  운영은 503. nodemailer는 너무 최근 버전을 피해 9.1.1로 고정했다.
+### Google 계정 로그인 (2026-11-02)
+처음에는 메일 인증 코드(SMTP) 방식이었는데, 같은 날 오너 요청으로 **GCP OAuth(학교 Workspace, 사용자 유형 Internal)** 로 바꿨다.
+인증 코드 표는 마이그레이션 `drop_email_code`로 지웠고 nodemailer도 뺐다. `Teacher.email`·`emailConsentAt`은 그대로 쓴다.
+- 설정: `.env`의 `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_REDIRECT_URI`(운영 `https://dutycal.dsmhs.kr/api/auth/google/callback`).
+  하나라도 없으면 꺼지고 `NOT_CONFIGURED`로 돌려보낸다. GCP에서 받은 JSON 파일은 저장소에 두지 않는다(`.gitignore`의 `client_secret*.json`).
+- 흐름(`auth/googleAuth.ts`, 라우트는 `auth.routes.ts`): 시작 주소가 state·nonce·PKCE verifier를 세션 `googleFlow`에 두고 Google로 보낸다
+  (`hd=dsm.hs.kr`). `GET /api/auth/google/callback`이 state(10분, 한 번만)를 확인하고 서버에서 코드를 교환한 뒤 id_token 클레임
+  (iss·aud·exp·nonce, `email_verified`, `hd === 'dsm.hs.kr'`)을 본다. 토큰 엔드포인트에서 직접 받은 토큰이라 서명은 검증하지 않는다.
+  결과는 `/`로 돌려보내고, 실패하면 `?loginError=` / `?linkError=` 코드를 붙인다 (메시지는 `client/src/lib/googleAuth.ts`).
+  - 로그인 `GET /api/auth/google/login`: 이메일이 연결된 활성 교사로 세션을 새로 만들고 `loginMethod: 'GOOGLE'`
+    (`requireAuth`가 이 세션의 `mustChangePin`을 false로 바꾼다). 연결 안 된 계정은 `NOT_REGISTERED`.
+  - 연결 `GET /api/auth/google/link?consent=1`(로그인 필요): 동의창(`GoogleLinkDialog`)에서 체크 후 이동. 시작한 교사로 아직 로그인되어
+    있어야 하고, 다른 교사가 쓰는 주소면 `EMAIL_TAKEN`. 이메일·동의 일시 저장 + 감사 로그 `REGISTER_EMAIL`. 철회는 `DELETE /api/me/email`(`WITHDRAW_EMAIL`).
+  - 테스트는 `googleOAuth.exchangeCode`를 바꿔 끼우고(`googleAuth.routes.test.ts`), vitest `test.env`에 가짜 GOOGLE_* 값이 있다.
+- 서버가 Google에 직접 요청하므로 TLS를 가로채는 개발 PC에서 실제로 시험하려면 서버도 `NODE_OPTIONS=--use-system-ca`로 띄운다
+  (Docker 이미지는 이미 설정됨). 개발용 리디렉션 URI(`http://localhost:5173/api/auth/google/callback`)는 GCP에 따로 등록해야 한다.
+- 로그인 화면은 Google(왼쪽)과 ID·PIN(오른쪽, 좁은 화면은 아래)을 함께 보여 준다 (미연결 교사는 PIN으로 들어가 동의·연결).
+  서버는 연결한 교사의 PIN 로그인도 받는다.
+- **동의는 필수다** (오너 결정): `requireAuth`가 이메일 미연결 교사(관리자 포함)에게 `GET /api/auth/me`, `PUT /api/auth/pin`,
+  `GET /api/auth/google/link` 말고는 403 `{ requiresEmailConsent }`를 준다 (`CONSENT_EXEMPT`, 메서드+경로로 비교).
+  화면은 `App.tsx`가 PIN 변경 다음에 `GoogleLinkDialog required`만 보여 주고, '동의하지 않음'은 로그아웃이다. 철회하면 다시 막힌다.
+  Google 장애 등 비상시 `.env`의 `EMAIL_CONSENT_REQUIRED=false`로 끈다 (`/api/auth/me`의 `emailConsentRequired`).
+  테스트는 vitest `test.env`에서 꺼 두고 `googleAuth.routes.test.ts`가 켜서 확인한다. 동의 전 화면에서 새 API를 부르면 예외 목록에 넣어야 한다.
 - `GET /api/teachers`는 다른 교사의 `email`/`emailConsentAt`을 빼고 `hasEmail`만 준다 (관리자·본인은 전부). 교사 관리 화면에 ✉ 표시.
 - 관리자 PIN 재확인(마감 해제·복원 등)은 여전히 PIN을 쓴다.
 
