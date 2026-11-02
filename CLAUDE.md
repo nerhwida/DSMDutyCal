@@ -178,6 +178,11 @@ $env:NODE_OPTIONS = "--use-system-ca"
   세션에 `loginMethod: 'EMAIL'`을 두고, `requireAuth`가 이 세션의 `mustChangePin`을 false로 바꾼다 (PIN을 몰라도 됨).
 - 로그인 화면은 이메일 인증(왼쪽)과 ID·PIN(오른쪽, 좁은 화면은 아래)을 함께 보여 준다 (미등록 교사는 PIN으로 들어가 동의·등록).
   서버는 등록한 교사의 PIN 로그인도 받는다.
+- **동의는 필수다** (오너 결정): `requireAuth`가 이메일 미등록 교사(관리자 포함)에게 `GET /api/auth/me`, `PUT /api/auth/pin`,
+  `POST /api/me/email/request|verify` 말고는 403 `{ requiresEmailConsent }`를 준다 (`CONSENT_EXEMPT`, 메서드+경로로 비교).
+  화면은 `App.tsx`가 PIN 변경 다음에 `EmailRegisterDialog required`만 보여 주고, '동의하지 않음'은 로그아웃이다. 철회하면 다시 막힌다.
+  메일 장애 등 비상시 `.env`의 `EMAIL_CONSENT_REQUIRED=false`로 끈다 (`/api/auth/me`의 `emailConsentRequired`).
+  테스트는 vitest `test.env`에서 꺼 두고 `emailAuth.routes.test.ts`가 켜서 확인한다. 동의 전 화면에서 새 API를 부르면 예외 목록에 넣어야 한다.
 - 코드(`EmailCode`, 교사·용도별 최신 1건만 유효): SHA-256 해시 저장, 10분 유효, 5회 틀리면 무효, 재발송 1분 간격.
 - 메일은 `lib/mailer.ts`(nodemailer, `SMTP_*`/`MAIL_FROM`). SMTP_HOST가 없으면 개발은 콘솔 출력 + `devOutbox`(테스트가 코드를 읽음),
   운영은 503. nodemailer는 너무 최근 버전을 피해 9.1.1로 고정했다.
