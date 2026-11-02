@@ -20,8 +20,12 @@ export default defineConfig({
       ADMIN_NAME: '테스트관리자',
       ADMIN_INITIAL_PIN: '9999',
       CLIENT_ORIGIN: 'http://localhost:5173',
-      // 대부분의 테스트는 이메일 미등록 교사로 PIN 로그인한다. 동의 필수 동작은 emailAuth.routes.test.ts에서 켜고 확인한다.
+      // 대부분의 테스트는 Google 계정 미연결 교사로 PIN 로그인한다. 동의 필수 동작은 googleAuth.routes.test.ts에서 켜고 확인한다.
       EMAIL_CONSENT_REQUIRED: 'false',
+      // 토큰 교환은 googleAuth.routes.test.ts가 바꿔 끼우므로 실제 Google에 요청하지 않는다.
+      GOOGLE_CLIENT_ID: 'test-client.apps.googleusercontent.com',
+      GOOGLE_CLIENT_SECRET: 'test-secret',
+      GOOGLE_REDIRECT_URI: 'http://localhost:5173/api/auth/google/callback',
     },
   },
 });

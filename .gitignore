@@ -19,3 +19,5 @@ docker/certs/*.crt
 Thumbs.db
 *.log
 coverage/
+# GCP OAuth 클라이언트 JSON (Client Secret 포함)
+client_secret*.json

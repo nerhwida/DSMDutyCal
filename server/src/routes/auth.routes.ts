@@ -1,12 +1,20 @@
-import { Router } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { login } from '../auth/authService.js';
 import { hashPin, isValidPinFormat, verifyPin } from '../auth/pin.js';
 import { emailConsentRequired, requireAuth } from '../permissions/middleware.js';
 import { handle } from '../lib/http.js';
-import { assertMailAvailable } from '../lib/mailer.js';
-import { CODE_FAILURE_MESSAGE, checkEmailCode, issueEmailCode, normalizeSchoolEmail } from '../auth/emailAuth.js';
+import { recordAudit } from '../lib/audit.js';
+import {
+  FLOW_TTL_MS,
+  authorizationUrl,
+  googleConfig,
+  googleOAuth,
+  identityFromIdToken,
+  newFlow,
+  type GoogleFlow,
+} from '../auth/googleAuth.js';
 
 export const authRouter = Router();
 
@@ -46,49 +54,92 @@ authRouter.post('/login', async (req, res) => {
   });
 });
 
-const emailSchema = z.object({ email: z.string().max(200) });
-const NOT_SCHOOL_EMAIL = '@dsm.hs.kr 학교 이메일만 사용할 수 있습니다.';
+// ---------------------------------------------------------------------------
+// Google 계정(학교 Workspace) 로그인
+//   로그인: GET /google/login → Google → GET /google/callback → 등록된 이메일의 교사로 로그인
+//   연결:   (PIN 로그인 후 동의) GET /google/link?consent=1 → Google → callback → 이메일·동의 일시 저장
+// 결과는 화면으로 되돌려 보내고, 실패하면 ?loginError= / ?linkError= 코드를 붙인다 (메시지는 화면이 정한다).
+// ---------------------------------------------------------------------------
 
-/**
- * POST /api/auth/email/request — 이메일 로그인 인증 코드 요청.
- * 등록 여부가 드러나지 않도록 등록되지 않은 주소·재요청 대기 중에도 같은 응답을 준다.
- */
-authRouter.post(
-  '/email/request',
+type GoogleError =
+  | 'NOT_CONFIGURED'
+  | 'NO_CONSENT'
+  | 'CANCELLED'
+  | 'EXPIRED'
+  | 'FAILED'
+  | 'NOT_SCHOOL_ACCOUNT'
+  | 'NOT_REGISTERED'
+  | 'INACTIVE'
+  | 'EMAIL_TAKEN';
+
+function redirectWithError(res: Response, mode: GoogleFlow['mode'], code: GoogleError) {
+  res.redirect(`/?${mode === 'LOGIN' ? 'loginError' : 'linkError'}=${code}`);
+}
+
+function startGoogle(req: Request, res: Response, mode: GoogleFlow['mode']) {
+  const config = googleConfig();
+  if (!config) return redirectWithError(res, mode, 'NOT_CONFIGURED');
+  const flow = newFlow(mode, mode === 'LINK' ? req.user!.id : undefined);
+  req.session.googleFlow = flow;
+  req.session.save((err) => {
+    if (err) return redirectWithError(res, mode, 'FAILED');
+    res.redirect(authorizationUrl(config, flow));
+  });
+}
+
+/** GET /api/auth/google/login — Google 로그인 시작. */
+authRouter.get('/google/login', (req, res) => startGoogle(req, res, 'LOGIN'));
+
+/** GET /api/auth/google/link?consent=1 — 개인정보 수집·이용 동의 후 내 계정에 Google 계정(학교 이메일) 연결. */
+authRouter.get('/google/link', requireAuth, (req, res) => {
+  if (req.query.consent !== '1') return redirectWithError(res, 'LINK', 'NO_CONSENT');
+  startGoogle(req, res, 'LINK');
+});
+
+/** GET /api/auth/google/callback — Google이 돌려보내는 주소 (GCP에 등록한 리디렉션 URI). */
+authRouter.get(
+  '/google/callback',
   handle(async (req, res) => {
-    const parsed = emailSchema.safeParse(req.body);
-    const email = parsed.success ? normalizeSchoolEmail(parsed.data.email) : null;
-    if (!email) return res.status(400).json({ error: NOT_SCHOOL_EMAIL });
-    assertMailAvailable();
+    const flow = req.session.googleFlow;
+    delete req.session.googleFlow;
+    const mode = flow?.mode ?? 'LOGIN';
+    if (typeof req.query.error === 'string') return redirectWithError(res, mode, 'CANCELLED');
+    if (!flow || req.query.state !== flow.state || Date.now() - flow.startedAt > FLOW_TTL_MS) {
+      return redirectWithError(res, mode, 'EXPIRED');
+    }
+    const config = googleConfig();
+    if (!config) return redirectWithError(res, mode, 'NOT_CONFIGURED');
+    if (typeof req.query.code !== 'string') return redirectWithError(res, mode, 'FAILED');
 
-    const teacher = await prisma.teacher.findUnique({ where: { email } });
-    if (teacher?.active) await issueEmailCode(teacher.id, 'LOGIN', email);
-    res.json({ ok: true });
-  }),
-);
+    let idToken: string;
+    try {
+      idToken = await googleOAuth.exchangeCode(config, req.query.code, flow.verifier);
+    } catch (err) {
+      console.error(err);
+      return redirectWithError(res, mode, 'FAILED');
+    }
+    const identity = identityFromIdToken(idToken, { clientId: config.clientId, nonce: flow.nonce });
+    if (identity === 'INVALID_TOKEN') return redirectWithError(res, mode, 'FAILED');
+    if (identity === 'NOT_SCHOOL_ACCOUNT') return redirectWithError(res, mode, 'NOT_SCHOOL_ACCOUNT');
+    const owner = await prisma.teacher.findUnique({ where: { email: identity.email } });
 
-const emailVerifySchema = z.object({ email: z.string().max(200), code: z.string().trim().regex(/^\d{6}$/) });
-
-/** POST /api/auth/email/verify — 인증 코드 확인 후 로그인. */
-authRouter.post(
-  '/email/verify',
-  handle(async (req, res) => {
-    const parsed = emailVerifySchema.safeParse(req.body);
-    const email = parsed.success ? normalizeSchoolEmail(parsed.data.email) : null;
-    if (!parsed.success || !email) return res.status(400).json({ error: CODE_FAILURE_MESSAGE.INVALID });
-
-    const teacher = await prisma.teacher.findUnique({ where: { email } });
-    if (!teacher?.active) return res.status(401).json({ error: CODE_FAILURE_MESSAGE.INVALID });
-    const check = await checkEmailCode(teacher.id, 'LOGIN', parsed.data.code, email);
-    if (!check.ok) {
-      return res.status(check.reason === 'TOO_MANY' ? 429 : 401).json({ error: CODE_FAILURE_MESSAGE[check.reason] });
+    if (flow.mode === 'LINK') {
+      // 연결을 시작한 교사로 아직 로그인되어 있어야 한다
+      if (!req.session.teacherId || req.session.teacherId !== flow.teacherId) return redirectWithError(res, mode, 'EXPIRED');
+      if (owner && owner.id !== flow.teacherId) return redirectWithError(res, mode, 'EMAIL_TAKEN');
+      const consentAt = new Date();
+      await prisma.teacher.update({ where: { id: flow.teacherId }, data: { email: identity.email, emailConsentAt: consentAt } });
+      await recordAudit(flow.teacherId, 'REGISTER_EMAIL', { email: identity.email, consentAt, method: 'GOOGLE' });
+      return res.redirect('/');
     }
 
-    await prisma.teacher.update({ where: { id: teacher.id }, data: { failedLoginCount: 0, lockedUntil: null } });
+    if (!owner) return redirectWithError(res, mode, 'NOT_REGISTERED');
+    if (!owner.active) return redirectWithError(res, mode, 'INACTIVE');
+    await prisma.teacher.update({ where: { id: owner.id }, data: { failedLoginCount: 0, lockedUntil: null } });
     await new Promise<void>((resolve, reject) => req.session.regenerate((err) => (err ? reject(err) : resolve())));
-    req.session.teacherId = teacher.id;
-    req.session.loginMethod = 'EMAIL';
-    res.json({ ok: true, mustChangePin: false });
+    req.session.teacherId = owner.id;
+    req.session.loginMethod = 'GOOGLE';
+    res.redirect('/');
   }),
 );
 

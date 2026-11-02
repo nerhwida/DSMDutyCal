@@ -1,11 +1,14 @@
 import session from 'express-session';
 import { PrismaSessionStore } from './prismaSessionStore.js';
+import type { GoogleFlow } from './googleAuth.js';
 
 declare module 'express-session' {
   interface SessionData {
     teacherId?: number;
-    /** 이메일 인증으로 로그인한 세션은 PIN 변경을 강제하지 않는다. */
-    loginMethod?: 'PIN' | 'EMAIL';
+    /** Google 계정으로 로그인한 세션은 PIN 변경을 강제하지 않는다. */
+    loginMethod?: 'PIN' | 'GOOGLE';
+    /** 진행 중인 Google 로그인·연결 (state·nonce·PKCE). callback에서 지운다. */
+    googleFlow?: GoogleFlow;
   }
 }
 

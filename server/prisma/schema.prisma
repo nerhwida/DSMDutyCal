@@ -38,7 +38,6 @@ model Teacher {
   initialCounts      InitialCount[]
   notifications      Notification[]
   auditLogs          AuditLog[]
-  emailCodes         EmailCode[]
 
   currentAssignments  Assignment[] @relation("CurrentTeacher")
   originalAssignments Assignment[] @relation("OriginalTeacher")
@@ -299,18 +298,3 @@ model MakeupNote {
   createdBy Teacher? @relation(fields: [createdById], references: [id], onDelete: SetNull)
 }
 
-/// 이메일 인증 코드. purpose: 'LOGIN' | 'REGISTER'. 교사·용도별로 가장 최근 1건만 유효하다 (원문은 저장하지 않음).
-model EmailCode {
-  id        Int      @id @default(autoincrement())
-  teacherId Int
-  purpose   String
-  email     String
-  codeHash  String
-  attempts  Int      @default(0)
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-
-  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-
-  @@index([teacherId, purpose])
-}

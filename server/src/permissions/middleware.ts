@@ -9,11 +9,11 @@ import { authenticateApiKey } from '../services/apiClientService.js';
  * 이 미들웨어를 통과하지 못하면 이후의 모든 권한 검사는 의미가 없으므로
  * 보호된 라우터에는 반드시 가장 먼저 적용한다.
  */
-/** 개인정보 수집 동의·이메일 등록을 필수로 할지. 기본 켜짐. 메일 장애 등 비상시 .env의 EMAIL_CONSENT_REQUIRED=false로 끈다. */
+/** 개인정보 수집 동의·Google 계정 연결을 필수로 할지. 기본 켜짐. Google 로그인 장애 등 비상시 .env의 EMAIL_CONSENT_REQUIRED=false로 끈다. */
 export const emailConsentRequired = () => process.env.EMAIL_CONSENT_REQUIRED !== 'false';
 
-/** 동의 전에도 쓸 수 있는 API: 내 정보 확인, (최초) PIN 변경, 동의·이메일 등록. 로그아웃은 requireAuth를 거치지 않는다. */
-const CONSENT_EXEMPT = new Set(['GET /api/auth/me', 'PUT /api/auth/pin', 'POST /api/me/email/request', 'POST /api/me/email/verify']);
+/** 동의 전에도 쓸 수 있는 API: 내 정보 확인, (최초) PIN 변경, 동의·Google 계정 연결. 로그아웃은 requireAuth를 거치지 않는다. */
+const CONSENT_EXEMPT = new Set(['GET /api/auth/me', 'PUT /api/auth/pin', 'GET /api/auth/google/link']);
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   const teacherId = req.session.teacherId;
@@ -27,14 +27,14 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     return res.status(401).json({ error: '세션이 유효하지 않습니다. 다시 로그인해주세요.' });
   }
 
-  // 이메일로 로그인한 교사는 PIN을 몰라도 되므로 PIN 변경 화면을 강제하지 않는다.
-  req.user = req.session.loginMethod === 'EMAIL' ? { ...user, mustChangePin: false } : user;
+  // Google 계정으로 로그인한 교사는 PIN을 몰라도 되므로 PIN 변경 화면을 강제하지 않는다.
+  req.user = req.session.loginMethod === 'GOOGLE' ? { ...user, mustChangePin: false } : user;
 
-  // 동의하지 않은(이메일 미등록) 교사는 동의·등록 API 말고는 쓸 수 없다.
+  // 동의하지 않은(Google 계정 미연결) 교사는 동의·연결 API 말고는 쓸 수 없다.
   const route = `${req.method} ${req.originalUrl.split('?')[0]}`;
   if (emailConsentRequired() && user.email === null && !CONSENT_EXEMPT.has(route)) {
     return res.status(403).json({
-      error: '개인정보 수집·이용에 동의하고 학교 이메일을 등록해야 서비스를 이용할 수 있습니다.',
+      error: '개인정보 수집·이용에 동의하고 학교 Google 계정을 연결해야 서비스를 이용할 수 있습니다.',
       requiresEmailConsent: true,
     });
   }

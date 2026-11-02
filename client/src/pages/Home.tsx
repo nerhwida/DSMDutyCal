@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { roleLabel, useAuth } from '../auth/AuthContext';
 import { NotificationBell } from '../components/NotificationBell';
-import { EmailRegisterDialog } from '../components/EmailRegisterDialog';
+import { GoogleLinkDialog } from '../components/GoogleLinkDialog';
 import { CalendarPage } from './CalendarPage';
 import { MyDutyPage } from './MyDutyPage';
 import { StatsPage } from './StatsPage';
@@ -27,7 +27,7 @@ type Tab =
 
 const EMAIL_LATER_KEY = 'dutycal.emailRegisterLater';
 
-/** '나중에 하기'를 누른 로그인 세션(브라우저 탭)에서는 이메일 등록 창을 다시 띄우지 않는다. */
+/** '나중에 하기'를 누른 로그인 세션(브라우저 탭)에서는 Google 계정 연결 창을 다시 띄우지 않는다. */
 function emailLaterDismissed(): boolean {
   try {
     return sessionStorage.getItem(EMAIL_LATER_KEY) === '1';
@@ -37,7 +37,7 @@ function emailLaterDismissed(): boolean {
 }
 
 export function HomePage() {
-  const { user, logout, refresh } = useAuth();
+  const { user, logout } = useAuth();
   const [emailLater, setEmailLater] = useState(emailLaterDismissed);
   const canManageTeachers = !!user && (user.isAdmin || user.gradeHeadOf.length > 0);
   // F1-3: 일반 교사는 '내 감독'이 기본 진입 화면, 학년부장·ADMIN은 달력.
@@ -70,7 +70,7 @@ export function HomePage() {
   return (
     <div className="min-h-screen bg-slate-50 print:min-h-0 print:bg-white">
       {/* 동의 필수가 꺼져 있을 때만 여기서 선택 등록을 권한다 (켜져 있으면 App이 먼저 막는다). */}
-      {user.email === null && !emailLater && <EmailRegisterDialog onDone={refresh} onClose={postponeEmail} />}
+      {user.email === null && !emailLater && <GoogleLinkDialog onClose={postponeEmail} />}
       <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-3 print:hidden">
         <span className="text-sm font-medium text-slate-700">
           {user.name} 선생님 ({roleLabel(user)})

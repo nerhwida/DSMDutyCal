@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { roleLabel, useAuth } from '../auth/AuthContext';
-import { EmailRegisterDialog } from '../components/EmailRegisterDialog';
+import { GoogleLinkDialog } from '../components/GoogleLinkDialog';
 import { formatDateTime } from '../lib/date';
 import type { Teacher } from '../types';
 import { WEEKDAY_LABEL } from '../types';
@@ -65,7 +65,7 @@ export function MyInfoPage() {
     const after = user?.emailConsentRequired
       ? '철회하면 다시 동의하기 전까지 서비스를 이용할 수 없습니다.'
       : '이후에는 ID·PIN으로만 로그인할 수 있습니다.';
-    if (!window.confirm(`개인정보 수집·이용 동의를 철회하고 등록한 이메일을 삭제할까요? ${after}`)) return;
+    if (!window.confirm(`개인정보 수집·이용 동의를 철회하고 연결한 Google 계정(이메일)을 삭제할까요? ${after}`)) return;
     try {
       await api.delete('/api/me/email');
       await refresh();
@@ -95,7 +95,7 @@ export function MyInfoPage() {
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <div>
-        <h3 className="mb-1 text-sm font-semibold text-slate-700">이메일 로그인</h3>
+        <h3 className="mb-1 text-sm font-semibold text-slate-700">Google 계정 로그인</h3>
         {user.email ? (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
             <span>{user.email}</span>
@@ -106,22 +106,15 @@ export function MyInfoPage() {
           </div>
         ) : (
           <div className="flex items-center gap-3 text-sm">
-            <span className="text-slate-500">등록 안 함 (ID·PIN으로 로그인)</span>
+            <span className="text-slate-500">연결 안 함 (ID·PIN으로 로그인)</span>
             <button onClick={() => setRegistering(true)} className="rounded border border-slate-300 px-2 py-0.5 text-xs text-slate-700 hover:bg-slate-100">
-              이메일 등록
+              Google 계정 연결
             </button>
           </div>
         )}
       </div>
       {registering && (
-        <EmailRegisterDialog
-          onDone={async () => {
-            setRegistering(false);
-            await refresh();
-            await load();
-          }}
-          onClose={() => setRegistering(false)}
-        />
+        <GoogleLinkDialog onClose={() => setRegistering(false)} />
       )}
 
       <div>
