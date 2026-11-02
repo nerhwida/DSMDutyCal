@@ -3,36 +3,29 @@ import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { SCHOOL_EMAIL_DOMAIN } from '../components/EmailRegisterDialog';
 
-type Mode = 'email' | 'pin';
-
 /**
- * 이메일 인증 로그인이 기본 화면이다. 이메일을 아직 등록하지 않은 교사는 'ID·PIN으로 로그인'으로 들어가
- * 개인정보 수집에 동의하고 이메일을 등록한 뒤, 다음부터 이메일로 로그인한다.
+ * 이메일 인증과 ID·PIN 로그인을 나란히 보여 준다 (전환 기간 병행). 이메일을 아직 등록하지 않은 교사는
+ * ID·PIN으로 로그인해 개인정보 수집에 동의하고 이메일을 등록한 뒤, 다음부터 이메일로 로그인할 수 있다.
  */
 export function LoginPage() {
-  const [mode, setMode] = useState<Mode>('email');
-
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
-      <div className="w-full max-w-[420px] rounded-lg bg-white p-8 shadow-md">
+    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4 py-8">
+      <div className="w-full max-w-[840px] rounded-lg bg-white p-8 shadow-md">
         <h1 className="mb-1 text-xl font-bold text-slate-800">DutyCal 로그인</h1>
         <p className="mb-6 text-sm text-slate-500">자율학습 감독 관리 시스템</p>
 
-        {mode === 'email' ? <EmailLoginForm /> : <PinLoginForm />}
-
-        <div className="mt-5 border-t border-slate-100 pt-3 text-center text-sm">
-          {mode === 'email' ? (
-            <>
-              <p className="mb-1 text-xs text-slate-500">이메일을 아직 등록하지 않았나요?</p>
-              <button type="button" className="text-slate-700 underline hover:text-slate-900" onClick={() => setMode('pin')}>
-                ID·PIN으로 로그인 (로그인 후 이메일 등록)
-              </button>
-            </>
-          ) : (
-            <button type="button" className="text-slate-700 underline hover:text-slate-900" onClick={() => setMode('email')}>
-              이메일 인증으로 로그인
-            </button>
-          )}
+        <div className="grid gap-8 md:grid-cols-2 md:gap-0">
+          <section className="md:pr-8">
+            <h2 className="mb-3 text-sm font-semibold text-slate-800">이메일 인증 로그인</h2>
+            <EmailLoginForm />
+          </section>
+          <section className="border-t border-slate-200 pt-6 md:border-l md:border-t-0 md:pl-8 md:pt-0">
+            <h2 className="mb-3 text-sm font-semibold text-slate-800">ID · PIN 로그인</h2>
+            <PinLoginForm />
+            <p className="mt-3 text-xs text-slate-500">
+              이메일을 아직 등록하지 않았다면 ID·PIN으로 로그인한 뒤 개인정보 수집에 동의하고 이메일을 등록해주세요.
+            </p>
+          </section>
         </div>
       </div>
     </div>
@@ -178,7 +171,6 @@ function PinLoginForm() {
       <input
         type="text"
         autoComplete="username"
-        autoFocus
         value={name}
         onChange={(e) => setName(e.target.value)}
         className="mb-4 w-full rounded border border-slate-300 px-3 py-2 text-sm"

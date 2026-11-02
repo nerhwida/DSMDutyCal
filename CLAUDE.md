@@ -176,7 +176,7 @@ $env:NODE_OPTIONS = "--use-system-ca"
   감사 로그 `REGISTER_EMAIL`. 철회는 `DELETE /api/me/email`(`WITHDRAW_EMAIL`).
 - 로그인: `POST /api/auth/email/request`(등록 여부와 무관하게 같은 200 응답 — 계정 노출 방지) → `POST /api/auth/email/verify`.
   세션에 `loginMethod: 'EMAIL'`을 두고, `requireAuth`가 이 세션의 `mustChangePin`을 false로 바꾼다 (PIN을 몰라도 됨).
-- 로그인 화면은 이메일 인증이 기본이고, 아래 'ID·PIN으로 로그인' 링크로 바꾼다 (미등록 교사는 PIN으로 들어가 동의·등록).
+- 로그인 화면은 이메일 인증(왼쪽)과 ID·PIN(오른쪽, 좁은 화면은 아래)을 함께 보여 준다 (미등록 교사는 PIN으로 들어가 동의·등록).
   서버는 등록한 교사의 PIN 로그인도 받는다.
 - 코드(`EmailCode`, 교사·용도별 최신 1건만 유효): SHA-256 해시 저장, 10분 유효, 5회 틀리면 무효, 재발송 1분 간격.
 - 메일은 `lib/mailer.ts`(nodemailer, `SMTP_*`/`MAIL_FROM`). SMTP_HOST가 없으면 개발은 콘솔 출력 + `devOutbox`(테스트가 코드를 읽음),
