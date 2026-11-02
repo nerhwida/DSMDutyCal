@@ -5,12 +5,14 @@ export const SCHOOL_EMAIL_DOMAIN = 'dsm.hs.kr';
 
 interface EmailRegisterDialogProps {
   onDone: () => void;
-  /** '나중에 하기' (동의하지 않음). 기존 ID·PIN 로그인을 계속 쓴다. */
+  /** 닫기. required면 '동의하지 않음'(로그아웃), 아니면 '나중에 하기'. */
   onClose: () => void;
+  /** 동의 필수: 동의하지 않으면 서비스를 쓸 수 없다. */
+  required?: boolean;
 }
 
 /** 개인정보 수집·이용 동의 + 학교 이메일 등록 (인증 코드 확인). 등록하면 이메일 인증으로 로그인할 수 있다. */
-export function EmailRegisterDialog({ onDone, onClose }: EmailRegisterDialogProps) {
+export function EmailRegisterDialog({ onDone, onClose, required = false }: EmailRegisterDialogProps) {
   const [localPart, setLocalPart] = useState('');
   const [consent, setConsent] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
@@ -52,7 +54,7 @@ export function EmailRegisterDialog({ onDone, onClose }: EmailRegisterDialogProp
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 print:hidden">
       <div className="max-h-full w-full max-w-lg space-y-4 overflow-y-auto rounded-lg bg-white p-6 shadow-lg">
         <div>
-          <h2 className="text-base font-semibold text-slate-800">이메일 로그인 등록</h2>
+          <h2 className="text-base font-semibold text-slate-800">{required ? '개인정보 수집·이용 동의 (필수)' : '이메일 로그인 등록'}</h2>
           <p className="mt-1 text-sm text-slate-500">
             학교 이메일(@{SCHOOL_EMAIL_DOMAIN})을 등록하면 다음부터는 PIN 대신 메일로 받은 인증 코드로 로그인합니다.
           </p>
@@ -77,8 +79,10 @@ export function EmailRegisterDialog({ onDone, onClose }: EmailRegisterDialogProp
             </tbody>
           </table>
           <p className="mt-2">
-            동의하지 않을 권리가 있으며, 동의하지 않아도 기존 ID·PIN으로 계속 로그인할 수 있습니다. 동의는 '내 감독' 화면의 내 정보에서
-            언제든 철회할 수 있습니다. 이메일 주소는 본인과 관리자만 볼 수 있습니다.
+            {required
+              ? '동의하지 않을 권리가 있으나, 동의하지 않으면 DutyCal 서비스를 이용할 수 없습니다. 동의는 내 정보에서 철회할 수 있으며 철회하면 서비스 이용이 중지됩니다.'
+              : "동의하지 않을 권리가 있으며, 동의하지 않아도 기존 ID·PIN으로 계속 로그인할 수 있습니다. 동의는 '내 감독' 화면의 내 정보에서 언제든 철회할 수 있습니다."}{' '}
+            이메일 주소는 본인과 관리자만 볼 수 있습니다.
           </p>
         </section>
 
@@ -150,7 +154,7 @@ export function EmailRegisterDialog({ onDone, onClose }: EmailRegisterDialogProp
 
         <div className="flex justify-end">
           <button onClick={onClose} className="rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-600">
-            나중에 하기
+            {required ? '동의하지 않음 (로그아웃)' : '나중에 하기'}
           </button>
         </div>
       </div>

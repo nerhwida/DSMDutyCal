@@ -69,6 +69,7 @@ export function HomePage() {
 
   return (
     <div className="min-h-screen bg-slate-50 print:min-h-0 print:bg-white">
+      {/* 동의 필수가 꺼져 있을 때만 여기서 선택 등록을 권한다 (켜져 있으면 App이 먼저 막는다). */}
       {user.email === null && !emailLater && <EmailRegisterDialog onDone={refresh} onClose={postponeEmail} />}
       <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-3 print:hidden">
         <span className="text-sm font-medium text-slate-700">

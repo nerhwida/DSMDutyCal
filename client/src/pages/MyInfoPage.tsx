@@ -62,7 +62,10 @@ export function MyInfoPage() {
   }
 
   async function withdrawEmail() {
-    if (!window.confirm('개인정보 수집·이용 동의를 철회하고 등록한 이메일을 삭제할까요? 이후에는 ID·PIN으로만 로그인할 수 있습니다.')) return;
+    const after = user?.emailConsentRequired
+      ? '철회하면 다시 동의하기 전까지 서비스를 이용할 수 없습니다.'
+      : '이후에는 ID·PIN으로만 로그인할 수 있습니다.';
+    if (!window.confirm(`개인정보 수집·이용 동의를 철회하고 등록한 이메일을 삭제할까요? ${after}`)) return;
     try {
       await api.delete('/api/me/email');
       await refresh();

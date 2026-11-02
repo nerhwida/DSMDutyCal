@@ -23,7 +23,7 @@ export function LoginPage() {
             <h2 className="mb-3 text-sm font-semibold text-slate-800">ID · PIN 로그인</h2>
             <PinLoginForm />
             <p className="mt-3 text-xs text-slate-500">
-              이메일을 아직 등록하지 않았다면 ID·PIN으로 로그인한 뒤 개인정보 수집에 동의하고 이메일을 등록해주세요.
+              이메일을 아직 등록하지 않았다면 ID·PIN으로 로그인한 뒤 개인정보 수집에 동의하고 이메일을 등록해야 서비스를 이용할 수 있습니다.
             </p>
           </section>
         </div>

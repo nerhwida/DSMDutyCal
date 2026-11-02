@@ -9,6 +9,8 @@ export interface AuthUser {
   mustChangePin: boolean;
   /** 등록한 학교 이메일. null이면 개인정보 수집 동의·이메일 등록 전. */
   email: string | null;
+  /** true면 이메일 미등록 교사는 동의·등록 화면만 쓸 수 있다 (서버도 다른 API를 막는다). */
+  emailConsentRequired: boolean;
   gradeHeadOf: number[];
 }
 

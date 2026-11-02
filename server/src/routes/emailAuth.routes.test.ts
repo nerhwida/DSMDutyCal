@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app.js';
 import { loginBody } from '../test/helpers.js';
@@ -144,5 +144,41 @@ describe('이메일 인증 로그인', () => {
     const sent = devOutbox.length;
     await request(app).post('/api/auth/email/request').send({ email: email2 });
     expect(devOutbox.length).toBe(sent);
+  });
+});
+
+describe('동의 필수 (EMAIL_CONSENT_REQUIRED)', () => {
+  beforeAll(() => {
+    process.env.EMAIL_CONSENT_REQUIRED = 'true';
+  });
+  afterAll(() => {
+    process.env.EMAIL_CONSENT_REQUIRED = 'false';
+  });
+
+  it('동의·등록 전에는 내 정보·PIN 변경·등록 API만 쓸 수 있고, 등록하면 모두 쓸 수 있다', async () => {
+    const t = await newTeacher('동의필수');
+    const me = await t.agent.get('/api/auth/me');
+    expect(me.status).toBe(200);
+    expect(me.body).toMatchObject({ email: null, emailConsentRequired: true });
+
+    const blocked = await t.agent.get('/api/teachers');
+    expect(blocked.status).toBe(403);
+    expect(blocked.body.requiresEmailConsent).toBe(true);
+    expect((await t.agent.get('/api/me/history')).status).toBe(403);
+    expect((await t.agent.put('/api/auth/pin').send({ currentPin: '1234', newPin: '5678' })).status).toBe(200);
+
+    await register(t.agent, uniqueEmail('required'));
+    expect((await t.agent.get('/api/teachers')).status).toBe(200);
+
+    // 동의를 철회하면 다시 막힌다
+    expect((await t.agent.delete('/api/me/email')).status).toBe(200);
+    expect((await t.agent.get('/api/teachers')).status).toBe(403);
+  });
+
+  it('관리자도 동의 전에는 막힌다', async () => {
+    const admin = await prisma.teacher.create({ data: { name: `동의관리자_${Date.now()}`, pinHash: await hashPin('1234'), isAdmin: true } });
+    const agent = request.agent(app);
+    await agent.post('/api/auth/login').send(await loginBody(admin.id, '1234'));
+    expect((await agent.get('/api/api-clients')).status).toBe(403);
   });
 });

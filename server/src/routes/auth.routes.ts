@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { login } from '../auth/authService.js';
 import { hashPin, isValidPinFormat, verifyPin } from '../auth/pin.js';
-import { requireAuth } from '../permissions/middleware.js';
+import { emailConsentRequired, requireAuth } from '../permissions/middleware.js';
 import { handle } from '../lib/http.js';
 import { assertMailAvailable } from '../lib/mailer.js';
 import { CODE_FAILURE_MESSAGE, checkEmailCode, issueEmailCode, normalizeSchoolEmail } from '../auth/emailAuth.js';
@@ -102,7 +102,8 @@ authRouter.post('/logout', (req, res) => {
 
 /** GET /api/auth/me — 세션·역할·담당 학년. */
 authRouter.get('/me', requireAuth, (req, res) => {
-  res.json(req.user);
+  // emailConsentRequired: 이메일 미등록이면 화면이 동의·등록 화면만 보여 준다.
+  res.json({ ...req.user, emailConsentRequired: emailConsentRequired() });
 });
 
 const pinChangeSchema = z.object({
